@@ -1,123 +1,123 @@
-# FXSSI Data Extractor - Projektdokumentation
+# FXSSI Data Extractor - Project Documentation
 
-## Überblick
+## Overview
 
-Der **FXSSI Data Extractor** ist eine Java-Anwendung zur automatisierten Extraktion von Forex-Sentiment-Daten von der Website FXSSI.com. Das System sammelt stündlich Current Ratio Daten für verschiedene Währungspaare und speichert diese strukturiert in CSV-Dateien für weitere Analysen.
+The **FXSSI Data Extractor** is a Java application for automated extraction of Forex sentiment data from the FXSSI.com website. The system collects Current Ratio data for various currency pairs hourly and stores them structurally in CSV files for further analysis.
 
-### Hauptfunktionen
-- **Automatisierte Datenextraktion**: Stündliche Sammlung von Buy/Sell-Verhältnissen von FXSSI.com
-- **Web-Scraping**: Robustes HTML-Parsing mit JSoup und Fallback-Strategien
-- **Datenmanagement**: Automatische CSV-Dateierstellung mit täglicher Segmentierung
-- **Handelssignal-Generierung**: Contrarian-Approach basierend auf Sentiment-Daten
-- **Scheduler-System**: Zeitgesteuerte Ausführung mit konfigurierbaren Intervallen
-- **Dateiverwaltung**: Backup, Cleanup und Validierungsfunktionen
+### Main Features
+- **Automated Data Extraction**: Hourly collection of Buy/Sell ratios from FXSSI.com
+- **Web Scraping**: Robust HTML parsing with JSoup and fallback strategies
+- **Data Management**: Automatic CSV file creation with daily segmentation
+- **Trading Signal Generation**: Contrarian approach based on sentiment data
+- **Scheduler System**: Time-controlled execution with configurable intervals
+- **File Management**: Backup, cleanup, and validation functions
 
-## Technologie-Stack
+## Technology Stack
 
-- **Java 11+** mit java.util.logging
-- **JSoup** für Web-Scraping und HTML-Parsing
-- **ScheduledExecutorService** für Zeitsteuerung
-- **CSV-Format** für Datenexport
-- **Log4j** für erweiterte Logging-Funktionen
-- **JUnit 5** für Unit-Tests
+- **Java 11+** with java.util.logging
+- **JSoup** for web scraping and HTML parsing
+- **ScheduledExecutorService** for time control
+- **CSV format** for data export
+- **Log4j** for advanced logging features
+- **JUnit 5** for unit testing
 
-## Projektarchitektur
+## Project Architecture
 
-### Package-Struktur
+### Package Structure
 ```
 com.fxssi.extractor/
-├── model/           # Datenmodelle
-├── scraper/         # Web-Scraping Komponenten
-├── storage/         # Dateiverwaltung
-└── scheduler/       # Zeitsteuerung
+├── model/           # Data models
+├── scraper/         # Web scraping components
+├── storage/         # File management
+└── scheduler/       # Time control
 ```
 
-### Architektur-Pattern
-- **Modulare Architektur** mit klarer Package-Trennung
-- **Scheduler-Pattern** für zeitgesteuerte Datensammlung
-- **Facade-Pattern** für Scraper-Komponente
-- **Safe Task Wrapper** für robuste Exception-Behandlung
+### Architecture Patterns
+- **Modular Architecture** with clear package separation
+- **Scheduler Pattern** for time-controlled data collection
+- **Facade Pattern** for scraper component
+- **Safe Task Wrapper** for robust exception handling
 
-## Klassenübersicht
+## Class Overview
 
-### 1. FXSSIDataExtractor (Hauptklasse)
-**Zweck**: Orchestrator und Einstiegspunkt der Anwendung
+### 1. FXSSIDataExtractor (Main Class)
+**Purpose**: Orchestrator and application entry point
 
-**Funktionen**:
-- Koordiniert alle Komponenten (Scraper, FileManager, Scheduler)
-- Führt initiale Datenextraktion durch
-- Startet stündlichen Scheduler
-- Behandelt Shutdown-Hooks für sauberes Beenden
+**Functions**:
+- Coordinates all components (Scraper, FileManager, Scheduler)
+- Performs initial data extraction
+- Starts hourly scheduler
+- Handles shutdown hooks for clean termination
 
-**Wichtige Methoden**:
-- `start()`: Startet das System
-- `stop()`: Stoppt das System ordnungsgemäß
-- `extractAndSaveData()`: Führt Datenextraktion durch
+**Key Methods**:
+- `start()`: Starts the system
+- `stop()`: Stops the system properly
+- `extractAndSaveData()`: Performs data extraction
 
 ### 2. CurrencyPairData (model/)
-**Zweck**: Datenmodell für Währungspaar-Sentiment-Daten
+**Purpose**: Data model for currency pair sentiment data
 
-**Eigenschaften**:
-- `currencyPair`: Währungspaar (z.B. "EUR/USD")
-- `buyPercentage`: Kaufanteil in Prozent
-- `sellPercentage`: Verkaufsanteil in Prozent
-- `tradingSignal`: Handelssignal (BUY/SELL/NEUTRAL)
-- `timestamp`: Zeitstempel der Datenerfassung
+**Properties**:
+- `currencyPair`: Currency pair (e.g., "EUR/USD")
+- `buyPercentage`: Buy percentage
+- `sellPercentage`: Sell percentage
+- `tradingSignal`: Trading signal (BUY/SELL/NEUTRAL)
+- `timestamp`: Data capture timestamp
 
-**Funktionen**:
-- CSV-Import/Export
-- Datenkonsistenz-Prüfung
-- Automatische Handelssignal-Berechnung
+**Functions**:
+- CSV import/export
+- Data consistency validation
+- Automatic trading signal calculation
 
 ### 3. FXSSIScraper (scraper/)
-**Zweck**: Web-Scraper für FXSSI Current Ratio Daten
+**Purpose**: Web scraper for FXSSI Current Ratio data
 
-**Funktionen**:
-- HTML-Parsing mit JSoup
-- Extraktion von Währungspaaren und Prozentangaben
-- Fallback-Strategien bei Parsing-Problemen
-- Verbindungstest zur FXSSI-Website
+**Functions**:
+- HTML parsing with JSoup
+- Currency pair and percentage extraction
+- Fallback strategies for parsing issues
+- Connection testing to FXSSI website
 
-**Wichtige Methoden**:
-- `extractCurrentRatioData()`: Hauptmethode für Datenextraktion
-- `testConnection()`: Verbindungstest
-- `parseCurrentRatioData()`: HTML-Parsing
+**Key Methods**:
+- `extractCurrentRatioData()`: Main data extraction method
+- `testConnection()`: Connection test
+- `parseCurrentRatioData()`: HTML parsing
 
 ### 4. DataFileManager (storage/)
-**Zweck**: CSV-Dateiverwaltung mit erweiterten Funktionen
+**Purpose**: CSV file management with advanced features
 
-**Funktionen**:
-- Tägliche CSV-Dateisegmentierung
-- Daten-Backup und -Cleanup
-- Datenvalidierung
-- Statistiken über gespeicherte Daten
+**Functions**:
+- Daily CSV file segmentation
+- Data backup and cleanup
+- Data validation
+- Statistics about stored data
 
-**Wichtige Methoden**:
-- `appendDataToFile()`: Daten an heutige Datei anhängen
-- `readDataFromFile()`: Daten aus Datei lesen
-- `cleanupOldFiles()`: Alte Dateien löschen
-- `validateDataFile()`: Dateiintegrität prüfen
+**Key Methods**:
+- `appendDataToFile()`: Append data to today's file
+- `readDataFromFile()`: Read data from file
+- `cleanupOldFiles()`: Delete old files
+- `validateDataFile()`: Check file integrity
 
 ### 5. HourlyScheduler (scheduler/)
-**Zweck**: Zeitsteuerung für stündliche Ausführung
+**Purpose**: Time control for hourly execution
 
-**Funktionen**:
-- Stündliche Ausführung zur vollen Stunde
-- SafeTaskWrapper für Stabilität
-- Daemon-Threads für sauberes Beenden
-- Custom-Intervall-Unterstützung für Tests
+**Functions**:
+- Hourly execution at the top of the hour
+- SafeTaskWrapper for stability
+- Daemon threads for clean shutdown
+- Custom interval support for testing
 
-**Wichtige Methoden**:
-- `startScheduling()`: Scheduler starten
-- `stopScheduling()`: Scheduler stoppen
-- `executeTaskManually()`: Manuelle Ausführung
+**Key Methods**:
+- `startScheduling()`: Start scheduler
+- `stopScheduling()`: Stop scheduler
+- `executeTaskManually()`: Manual execution
 
-## Installation und Setup
+## Installation and Setup
 
-### Voraussetzungen
-- Java 11 oder höher
-- Maven für Dependency-Management
-- Internetverbindung für FXSSI.com
+### Prerequisites
+- Java 11 or higher
+- Maven for dependency management
+- Internet connection for FXSSI.com
 
 ### Dependencies (pom.xml)
 ```xml
@@ -133,7 +133,7 @@ com.fxssi.extractor/
 </dependency>
 ```
 
-### Projektstruktur
+### Project Structure
 ```
 fxssi-extractor/
 ├── src/
@@ -146,167 +146,290 @@ fxssi-extractor/
 │   │       └── scheduler/
 │   └── main/resources/
 │       └── log4j.xml
-├── data/                    # Wird automatisch erstellt
-├── logs/                    # Wird automatisch erstellt
+├── data/                    # Created automatically
+├── logs/                    # Created automatically
 └── pom.xml
 ```
 
-## Verwendung
+## Usage
 
-### 1. Programm starten
+### 1. Starting the Program
 ```bash
 java -jar fxssi-extractor.jar
 ```
 
-### 2. Manuelle Ausführung
-Das Programm kann auch programmatisch verwendet werden:
+### 2. Manual Execution
+The program can also be used programmatically:
 ```java
 FXSSIDataExtractor extractor = new FXSSIDataExtractor();
 extractor.start();
-// ... läuft automatisch
+// ... runs automatically
 extractor.stop();
 ```
 
-### 3. Custom Scheduler für Tests
+### 3. Custom Scheduler for Testing
 ```java
 HourlyScheduler customScheduler = HourlyScheduler.createCustomIntervalScheduler(
     () -> System.out.println("Test execution"), 
-    5 // 5 Minuten Intervall
+    5 // 5-minute interval
 );
 ```
 
-## Konfiguration
+## Configuration
 
-### Logging-Konfiguration (log4j.xml)
-- **Console Appender**: INFO-Level für Konsole
-- **File Appender**: DEBUG-Level für allgemeine Logs
-- **Error File Appender**: ERROR-Level für Fehler-Logs
-- **Data Extraction Appender**: Spezielle Logs für Datenextraktion
+### Logging Configuration (log4j.xml)
+- **Console Appender**: INFO level for console
+- **File Appender**: DEBUG level for general logs
+- **Error File Appender**: ERROR level for error logs
+- **Data Extraction Appender**: Special logs for data extraction
 
-### Verzeichnisstruktur
-- `data/`: CSV-Dateien mit Sentiment-Daten
-- `logs/`: Log-Dateien der Anwendung
+### Directory Structure
+- `data/`: CSV files with sentiment data
+- `logs/`: Application log files
 
-### CSV-Dateiformat
+### CSV File Format
 ```
 Zeitstempel;Währungspaar;Buy_Prozent;Sell_Prozent;Handelssignal
 2025-08-08 14:30:00;EUR/USD;45.50;54.50;BUY
 2025-08-08 14:30:00;GBP/USD;62.30;37.70;SELL
 ```
 
-## Handelssignal-Logic
+## Trading Signal Logic
 
-Das System verwendet einen **Contrarian-Approach**:
-- **BUY Signal**: Wenn Buy% < 40% (gegen die Masse handeln)
-- **SELL Signal**: Wenn Buy% > 60% (gegen die Masse handeln)
-- **NEUTRAL**: Wenn 40% ≤ Buy% ≤ 60%
+The system uses a **Contrarian Approach**:
+- **BUY Signal**: When Buy% < 40% (trade against the crowd)
+- **SELL Signal**: When Buy% > 60% (trade against the crowd)
+- **NEUTRAL**: When 40% ≤ Buy% ≤ 60%
 
-## Monitoring und Diagnostik
+## Monitoring and Diagnostics
 
-### Log-Levels
-- **INFO**: Normale Betriebsmeldungen
-- **WARNING**: Potenzielle Probleme
-- **ERROR**: Kritische Fehler
-- **DEBUG**: Detaillierte Debugging-Informationen
+### Log Levels
+- **INFO**: Normal operation messages
+- **WARNING**: Potential issues
+- **ERROR**: Critical errors
+- **DEBUG**: Detailed debugging information
 
-### Status-Überwachung
+### Status Monitoring
 ```java
-// Scheduler-Status prüfen
+// Check scheduler status
 scheduler.getStatus();
 
-// Datenstatistiken abrufen
+// Get data statistics
 fileManager.getDataStatistics();
 
-// Verbindungstest
+// Connection test
 scraper.testConnection();
 ```
 
-## Wartung und Administration
+## Maintenance and Administration
 
-### Automatische Cleanup
+### Automatic Cleanup
 ```java
-// Dateien älter als 30 Tage löschen
+// Delete files older than 30 days
 fileManager.cleanupOldFiles(30);
 ```
 
-### Backup erstellen
+### Create Backup
 ```java
-// Backup der heutigen Datei
+// Backup today's file
 fileManager.backupTodayFile();
 ```
 
-### Datenvalidierung
+### Data Validation
 ```java
-// Datei auf Integrität prüfen
+// Check file integrity
 boolean isValid = fileManager.validateDataFile("fxssi_data_2025-08-08.csv");
 ```
 
-## Fehlerbehandlung
+## Error Handling
 
-### Robuste Ausführung
-- **SafeTaskWrapper**: Verhindert Scheduler-Stopp bei Exceptions
-- **Fallback-Parsing**: Alternative Parsing-Methoden bei Website-Änderungen
-- **Timeout-Handling**: 10 Sekunden Timeout für Web-Requests
-- **Retry-Logic**: Automatische Wiederholung bei temporären Fehlern
+### Robust Execution
+- **SafeTaskWrapper**: Prevents scheduler stop on exceptions
+- **Fallback Parsing**: Alternative parsing methods for website changes
+- **Timeout Handling**: 10-second timeout for web requests
+- **Retry Logic**: Automatic retry for temporary failures
 
-### Bekannte Limitationen
-- Abhängig von FXSSI-Website-Struktur
-- Benötigt stabile Internetverbindung
-- User-Agent-abhängige Website-Zugriffe
+### Known Limitations
+- Dependent on FXSSI website structure
+- Requires stable internet connection
+- User-agent dependent website access
 
-## Erweiterungsmöglichkeiten
+## Extension Possibilities
 
-### Zusätzliche Datenquellen
-- Weitere Forex-Sentiment-Websites
-- API-Integration für Echtzeitdaten
-- Historische Datenanalyse
+### Additional Data Sources
+- Other Forex sentiment websites
+- API integration for real-time data
+- Historical data analysis
 
-### Erweiterte Features
-- Web-Dashboard für Datenvisualisierung
-- E-Mail-Benachrichtigungen bei Signalen
-- Database-Integration (MySQL, PostgreSQL)
-- RESTful API für Datenabfrage
+### Advanced Features
+- Web dashboard for data visualization
+- Email notifications for signals
+- Database integration (MySQL, PostgreSQL)
+- RESTful API for data queries
 
-## Support und Wartung
+## Support and Maintenance
 
-### Logging-Analyse
+### Log Analysis
 ```bash
-# Alle Logs anzeigen
+# Show all logs
 tail -f logs/fxssi-extractor.log
 
-# Nur Fehler anzeigen
+# Show only errors
 tail -f logs/fxssi-extractor-error.log
 
-# Datenextraktion verfolgen
+# Follow data extraction
 tail -f logs/data-extraction.log
 ```
 
-### Performance-Monitoring
-- Durchschnittliche Extraktionszeit: ~10-30 Sekunden
-- Speicherverbrauch: ~50-100 MB
-- CPU-Last: Minimal außerhalb der Extraktionszeiten
+### Performance Monitoring
+- Average extraction time: ~10-30 seconds
+- Memory usage: ~50-100 MB
+- CPU load: Minimal outside extraction times
 
-## Entwicklung und Testing
+## Development and Testing
 
-### Unit-Tests ausführen
+### Run Unit Tests
 ```bash
 mvn test
 ```
 
-### Debug-Modus
+### Debug Mode
 ```java
-// Custom Scheduler für schnellere Tests
-HourlyScheduler debugScheduler = HourlyScheduler.createCustomIntervalScheduler(task, 1); // 1 Minute
+// Custom scheduler for faster testing
+HourlyScheduler debugScheduler = HourlyScheduler.createCustomIntervalScheduler(task, 1); // 1 minute
 ```
 
-### Code-Qualität
-- Umfassende Exception-Behandlung
-- Thread-sichere Implementierung
-- Modulare, erweiterbare Architektur
-- Ausführliche Logging und Diagnostik
+### Code Quality
+- Comprehensive exception handling
+- Thread-safe implementation
+- Modular, extensible architecture
+- Extensive logging and diagnostics
+
+## API Reference
+
+### Core Classes
+
+#### FXSSIDataExtractor
+```java
+public class FXSSIDataExtractor {
+    public void start()                    // Start the system
+    public void stop()                     // Stop the system
+    private void extractAndSaveData()      // Extract and save data
+}
+```
+
+#### CurrencyPairData
+```java
+public class CurrencyPairData {
+    public String getCurrencyPair()       // Get currency pair
+    public double getBuyPercentage()      // Get buy percentage
+    public double getSellPercentage()     // Get sell percentage
+    public TradingSignal getTradingSignal() // Get trading signal
+    public String toCsvLine()             // Convert to CSV
+    public static CurrencyPairData fromCsvLine(String csvLine) // Parse from CSV
+}
+```
+
+#### FXSSIScraper
+```java
+public class FXSSIScraper {
+    public List<CurrencyPairData> extractCurrentRatioData() // Extract data
+    public boolean testConnection()       // Test connection
+}
+```
+
+#### DataFileManager
+```java
+public class DataFileManager {
+    public void appendDataToFile(List<CurrencyPairData> data) // Append data
+    public List<CurrencyPairData> readDataFromFile(String filename) // Read data
+    public void cleanupOldFiles(int daysToKeep) // Cleanup old files
+    public boolean validateDataFile(String filename) // Validate file
+}
+```
+
+#### HourlyScheduler
+```java
+public class HourlyScheduler {
+    public void startScheduling()         // Start scheduler
+    public void stopScheduling()          // Stop scheduler
+    public void executeTaskManually()     // Manual execution
+    public boolean isRunning()            // Check if running
+    public String getStatus()             // Get status
+}
+```
+
+## Troubleshooting
+
+### Common Issues
+
+#### Connection Problems
+```java
+// Test FXSSI connection
+boolean connected = scraper.testConnection();
+if (!connected) {
+    // Check internet connection or proxy settings
+}
+```
+
+#### Parsing Failures
+- Website structure changes may require scraper updates
+- Check log files for parsing error details
+- Fallback methods provide basic functionality
+
+#### File Access Issues
+- Ensure write permissions for data/ directory
+- Check disk space availability
+- Verify file locking by other processes
+
+### Debug Logging
+Enable debug logging in log4j.xml:
+```xml
+<Logger name="com.fxssi.extractor" level="DEBUG" additivity="false">
+    <AppenderRef ref="Console"/>
+    <AppenderRef ref="FileAppender"/>
+</Logger>
+```
+
+## Deployment
+
+### Production Deployment
+1. Build the application: `mvn clean package`
+2. Copy JAR file to production server
+3. Ensure Java 11+ is installed
+4. Create data/ and logs/ directories
+5. Configure log4j.xml for production
+6. Start with: `java -jar fxssi-extractor.jar`
+
+### Docker Deployment
+```dockerfile
+FROM openjdk:11-jre-slim
+COPY target/fxssi-extractor.jar app.jar
+VOLUME ["/app/data", "/app/logs"]
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]
+```
+
+### Service Configuration
+Configure as system service (systemd):
+```ini
+[Unit]
+Description=FXSSI Data Extractor
+After=network.target
+
+[Service]
+Type=simple
+User=fxssi
+WorkingDirectory=/opt/fxssi-extractor
+ExecStart=/usr/bin/java -jar fxssi-extractor.jar
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+```
 
 ---
 
 **Version**: 1.0.0  
-**Letzte Aktualisierung**: August 2025  
-**Lizenz**: Proprietär
+**Last Updated**: August 2025  
+**License**: Proprietary
