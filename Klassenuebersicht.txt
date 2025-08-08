@@ -1,0 +1,43 @@
+# FXSSI Data Extractor - Klassenübersicht
+# Generated: 2025-08-08
+# Version: 1.0.0
+#
+# PROJECT DESCRIPTION:
+# FXSSI Data Extractor ist eine Java-Anwendung für automatisierte Extraktion von Forex-Sentiment-Daten von FXSSI.com. Sammelt stündlich Current Ratio Daten für Währungspaare und speichert diese in strukturierten CSV-Dateien für weitere Analysen.
+#
+# HAUPTFUNKTIONEN:
+# - Stündliche Extraktion von Forex-Sentiment-Daten (Buy/Sell-Verhältnisse) von FXSSI.com
+# - HTML-Parsing mit JSoup für robuste Datenextraktion
+# - Automatische CSV-Dateierstellung mit täglicher Segmentierung
+# - Handelssignal-Generierung basierend auf Sentiment-Daten (Contrarian-Approach)
+# - Scheduler-basierte Ausführung mit konfigurierbaren Intervallen
+# - Umfassende Dateiverwaltung mit Backup und Cleanup-Funktionen
+#
+# TECHNOLOGY STACK:
+# - Java 11+ mit java.util.logging
+# - JSoup für Web-Scraping und HTML-Parsing
+# - ScheduledExecutorService für Zeitsteuerung
+# - CSV-Format für Datenexport
+# - Regex-basierte Prozentangaben-Extraktion
+#
+# ARCHITECTURE HIGHLIGHTS:
+# - Modulare Architektur mit klarer Package-Trennung
+# - Scheduler-Pattern für zeitgesteuerte Datensammlung
+# - Facade-Pattern für Scraper-Komponente
+# - Robuste Exception-Handling mit SafeTaskWrapper
+# - Thread-sichere Ausführung mit Daemon-Threads
+# 
+# Format: <Package>.<Class> | <Description>
+# ========================================================================
+## Default Package
+FXSSIDataExtractor | Hauptklasse und Orchestrator. Koordiniert Scraper, FileManager und Scheduler für stündliche Datenextraktion.
+## Model Package
+model.CurrencyPairData | Datenmodell für Währungspaar-Sentiment mit Buy/Sell-Prozenten, Handelssignal und CSV-Import/Export.
+## Scraper Package  
+scraper.FXSSIScraper | Web-Scraper für FXSSI Current Ratio Daten. JSoup-basiertes HTML-Parsing mit Fallback-Strategien.
+## Storage Package
+storage.DataFileManager | CSV-Dateiverwaltung mit täglicher Segmentierung, Backup, Cleanup und Datenvalidierung.
+## Scheduler Package
+scheduler.HourlyScheduler | Zeitsteuerung für stündliche Ausführung. ScheduledExecutorService mit SafeTaskWrapper für Stabilität.
+## Test Package
+test.AppTest | Basis-Unit-Test-Klasse für JUnit-Tests.
