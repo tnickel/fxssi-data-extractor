@@ -4,15 +4,16 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 /**
  * Manager für die automatische Aktualisierung der GUI-Daten
- * Ermöglicht konfigurierbare Refresh-Intervalle in Minuten
+ * Ermöglicht konfigurierbare Refresh-Intervalle in Minuten mit verbesserter Thread-Sicherheit
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.0
+ * @version 1.1 (mit Schutz vor doppelter Ausführung)
  */
 public class DataRefreshManager {
     
@@ -25,6 +26,11 @@ public class DataRefreshManager {
     private ScheduledFuture<?> currentRefreshTask;
     private boolean isRunning = false;
     private int currentIntervalMinutes = 5; // Standard: 5 Minuten
+    
+    // Thread-Sicherheit für Refresh-Aufgaben
+    private final AtomicBoolean refreshInProgress = new AtomicBoolean(false);
+    private volatile long lastRefreshTime = 0;
+    private static final long MIN_REFRESH_INTERVAL_MS = 10000; // Minimum 10 Sekunden zwischen Refreshs
     
     /**
      * Konstruktor
@@ -55,9 +61,9 @@ public class DataRefreshManager {
         try {
             LOGGER.info("Starte Auto-Refresh mit " + intervalMinutes + " Minuten Intervall");
             
-            // Starte neues Refresh
+            // Starte neues Refresh mit thread-sicherem Wrapper
             currentRefreshTask = scheduler.scheduleAtFixedRate(
-                new SafeRefreshWrapper(refreshTask),
+                new SafeRefreshWrapper(this::executeRefreshSafely),
                 0,                    // Sofortige erste Ausführung
                 intervalMinutes,      // Intervall
                 TimeUnit.MINUTES
@@ -71,6 +77,35 @@ public class DataRefreshManager {
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Fehler beim Starten des Auto-Refresh: " + e.getMessage(), e);
             isRunning = false;
+        }
+    }
+    
+    /**
+     * Thread-sichere Ausführung der Refresh-Aufgabe
+     */
+    private void executeRefreshSafely() {
+        // Prüfe ob bereits ein Refresh läuft
+        if (!refreshInProgress.compareAndSet(false, true)) {
+            LOGGER.fine("Refresh übersprungen - bereits ein Refresh im Gange");
+            return;
+        }
+        
+        try {
+            // Prüfe Minimum-Intervall zwischen Refreshs
+            long currentTime = System.currentTimeMillis();
+            if (lastRefreshTime > 0 && (currentTime - lastRefreshTime) < MIN_REFRESH_INTERVAL_MS) {
+                long waitTime = MIN_REFRESH_INTERVAL_MS - (currentTime - lastRefreshTime);
+                LOGGER.fine("Minimum-Intervall noch nicht erreicht, warte " + (waitTime / 1000) + " Sekunden");
+                return;
+            }
+            
+            LOGGER.fine("Führe Auto-Refresh aus...");
+            refreshTask.run();
+            lastRefreshTime = currentTime;
+            LOGGER.fine("Auto-Refresh abgeschlossen");
+            
+        } finally {
+            refreshInProgress.set(false);
         }
     }
     
@@ -115,17 +150,20 @@ public class DataRefreshManager {
     }
     
     /**
-     * Führt ein manuelles Refresh durch
+     * Führt ein manuelles Refresh durch (thread-sicher)
      */
     public void executeManualRefresh() {
         LOGGER.info("Führe manuelles Refresh durch...");
         
-        try {
-            refreshTask.run();
-            LOGGER.info("Manuelles Refresh abgeschlossen");
-        } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Fehler beim manuellen Refresh: " + e.getMessage(), e);
-        }
+        // Verwende separaten Thread für manuelles Refresh
+        scheduler.execute(() -> {
+            try {
+                executeRefreshSafely();
+                LOGGER.info("Manuelles Refresh abgeschlossen");
+            } catch (Exception e) {
+                LOGGER.log(Level.WARNING, "Fehler beim manuellen Refresh: " + e.getMessage(), e);
+            }
+        });
     }
     
     /**
@@ -133,6 +171,13 @@ public class DataRefreshManager {
      */
     public boolean isAutoRefreshEnabled() {
         return isRunning && currentRefreshTask != null && !currentRefreshTask.isCancelled();
+    }
+    
+    /**
+     * Überprüft ob gerade ein Refresh läuft
+     */
+    public boolean isRefreshInProgress() {
+        return refreshInProgress.get();
     }
     
     /**
@@ -146,6 +191,10 @@ public class DataRefreshManager {
      * Gibt Informationen über den Status zurück
      */
     public String getStatus() {
+        if (refreshInProgress.get()) {
+            return "Auto-Refresh: Läuft gerade...";
+        }
+        
         if (!isAutoRefreshEnabled()) {
             return "Auto-Refresh: Deaktiviert";
         }
@@ -154,11 +203,36 @@ public class DataRefreshManager {
     }
     
     /**
+     * Gibt detaillierte Statusinformationen zurück
+     */
+    public String getDetailedStatus() {
+        StringBuilder status = new StringBuilder();
+        
+        status.append("Auto-Refresh Status:\n");
+        status.append("- Aktiviert: ").append(isAutoRefreshEnabled()).append("\n");
+        status.append("- Intervall: ").append(currentIntervalMinutes).append(" Minuten\n");
+        status.append("- Läuft gerade: ").append(refreshInProgress.get()).append("\n");
+        
+        if (lastRefreshTime > 0) {
+            long timeSinceLastRefresh = System.currentTimeMillis() - lastRefreshTime;
+            status.append("- Letzter Refresh: vor ").append(timeSinceLastRefresh / 1000).append(" Sekunden\n");
+        } else {
+            status.append("- Letzter Refresh: Noch keiner\n");
+        }
+        
+        return status.toString();
+    }
+    
+    /**
      * Berechnet die Zeit bis zum nächsten Refresh (geschätzt)
      */
     public String getTimeToNextRefresh() {
         if (!isAutoRefreshEnabled()) {
             return "Nicht verfügbar";
+        }
+        
+        if (refreshInProgress.get()) {
+            return "Läuft gerade...";
         }
         
         // Vereinfachte Schätzung - in einer echten Implementierung könnte man
@@ -175,6 +249,16 @@ public class DataRefreshManager {
         try {
             // Stoppe Auto-Refresh
             stopAutoRefresh();
+            
+            // Warte auf laufende Refreshs
+            if (refreshInProgress.get()) {
+                LOGGER.info("Warte auf Abschluss des laufenden Refresh...");
+                int waitCount = 0;
+                while (refreshInProgress.get() && waitCount < 30) { // Max 30 Sekunden warten
+                    Thread.sleep(1000);
+                    waitCount++;
+                }
+            }
             
             // Fahre Scheduler herunter
             scheduler.shutdown();
@@ -234,12 +318,12 @@ public class DataRefreshManager {
         @Override
         public void run() {
             try {
-                WRAPPER_LOGGER.fine("Starte Auto-Refresh Aufgabe...");
+                WRAPPER_LOGGER.fine("Starte geplante Refresh-Aufgabe...");
                 wrappedTask.run();
-                WRAPPER_LOGGER.fine("Auto-Refresh Aufgabe abgeschlossen");
+                WRAPPER_LOGGER.fine("Geplante Refresh-Aufgabe abgeschlossen");
                 
             } catch (Exception e) {
-                WRAPPER_LOGGER.log(Level.WARNING, "Fehler bei Auto-Refresh Aufgabe: " + e.getMessage(), e);
+                WRAPPER_LOGGER.log(Level.WARNING, "Fehler bei geplanter Refresh-Aufgabe: " + e.getMessage(), e);
                 // Exception wird nicht weitergegeben damit Auto-Refresh weiterläuft
             }
         }

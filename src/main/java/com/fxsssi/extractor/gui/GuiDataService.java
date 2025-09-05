@@ -30,7 +30,7 @@ public class GuiDataService {
     private List<CurrencyPairData> cachedData;
     private LocalDateTime lastCacheUpdate;
     private boolean isInitialized = false;
-    private String dataDirectory;
+    private String dataDirectory="";
     
     /**
      * Konstruktor mit Standard-Datenverzeichnis
@@ -57,8 +57,8 @@ public class GuiDataService {
             LOGGER.info("Initialisiere GuiDataService...");
             LOGGER.info("Datenverzeichnis: " + dataDirectory);
             
-            // Initialisiere Komponenten
-            scraper = new FXSSIScraper();
+            // Initialisiere Komponenten mit konfiguriertem Datenverzeichnis
+            scraper = new FXSSIScraper(dataDirectory);
             fileManager = new DataFileManager(dataDirectory);
             
             // Erstelle Datenverzeichnis
