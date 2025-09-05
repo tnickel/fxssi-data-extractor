@@ -1,43 +1,65 @@
 # FXSSI Data Extractor - Klassenübersicht
-# Generated: 2025-08-08
-# Version: 1.0.0
+# Generated: 2025-09-01
+# Version: 2.0.0
 #
 # PROJECT DESCRIPTION:
-# FXSSI Data Extractor ist eine Java-Anwendung für automatisierte Extraktion von Forex-Sentiment-Daten von FXSSI.com. Sammelt stündlich Current Ratio Daten für Währungspaare und speichert diese in strukturierten CSV-Dateien für weitere Analysen.
+# FXSSI Data Extractor ist eine Java-Anwendung für automatisierte Extraktion von Forex-Sentiment-Daten von FXSSI.com. Unterstützt sowohl Console-Modus für stündliche Hintergrund-Datensammlung als auch JavaFX GUI für interaktives Live-Monitoring. Sammelt Current Ratio Daten für Währungspaare und speichert diese in strukturierten CSV-Dateien für weitere Analysen.
 #
 # HAUPTFUNKTIONEN:
+# - Dual-Mode-Unterstützung: Console-Modus und JavaFX GUI-Modus mit Command-Line-Switching
 # - Stündliche Extraktion von Forex-Sentiment-Daten (Buy/Sell-Verhältnisse) von FXSSI.com
+# - Interactive JavaFX GUI mit Live-Sentiment-Tabelle und konfigurierbarem Auto-Refresh (1-60 Min.)
+# - Custom TableCell-Komponenten für visuelle Ratio-Balken und Trading-Signal-Icons
 # - HTML-Parsing mit JSoup für robuste Datenextraktion
 # - Automatische CSV-Dateierstellung mit täglicher Segmentierung
 # - Handelssignal-Generierung basierend auf Sentiment-Daten (Contrarian-Approach)
+# - Asynchrone Datenladung mit Caching-Mechanismus für GUI-Performance
 # - Scheduler-basierte Ausführung mit konfigurierbaren Intervallen
 # - Umfassende Dateiverwaltung mit Backup und Cleanup-Funktionen
 #
 # TECHNOLOGY STACK:
-# - Java 11+ mit java.util.logging
+# - Java 11+ mit java.util.logging und java.util.concurrent
+# - JavaFX für GUI-Framework mit programmatischer UI-Erstellung (ohne FXML)
 # - JSoup für Web-Scraping und HTML-Parsing
-# - ScheduledExecutorService für Zeitsteuerung
-# - CSV-Format für Datenexport
+# - ScheduledExecutorService für Zeitsteuerung (Console + GUI Auto-Refresh)
+# - CompletableFuture für asynchrone GUI-Operations
+# - CSV-Format für Datenexport mit UTF-8-Encoding
 # - Regex-basierte Prozentangaben-Extraktion
 #
 # ARCHITECTURE HIGHLIGHTS:
-# - Modulare Architektur mit klarer Package-Trennung
+# - Modulare Dual-Mode-Architektur mit geteilten Core-Komponenten
+# - Command-Line-Interface mit Argument-Parsing (--gui, --console, --help)
 # - Scheduler-Pattern für zeitgesteuerte Datensammlung
+# - Service-Layer-Pattern für GUI-Datenbereitstellung mit 2-Minuten-Caching
+# - Custom TableCell-Factory-Pattern für spezialisierte UI-Komponenten
 # - Facade-Pattern für Scraper-Komponente
 # - Robuste Exception-Handling mit SafeTaskWrapper
 # - Thread-sichere Ausführung mit Daemon-Threads
+# - Fallback-Strategien mit Demo-Daten und gespeicherten Daten
+# - Graceful Shutdown-Mechanismen für beide Modi
 # 
 # Format: <Package>.<Class> | <Description>
 # ========================================================================
 ## Default Package
-FXSSIDataExtractor | Hauptklasse und Orchestrator. Koordiniert Scraper, FileManager und Scheduler für stündliche Datenextraktion.
+FXSSIDataExtractor | Hauptklasse und Orchestrator. Dual-Mode-Support mit Command-Line-Parsing und Mode-Routing zwischen Console/GUI.
 ## Model Package
-model.CurrencyPairData | Datenmodell für Währungspaar-Sentiment mit Buy/Sell-Prozenten, Handelssignal und CSV-Import/Export.
+model.CurrencyPairData | Datenmodell für Währungspaar-Sentiment mit Buy/Sell-Prozenten, Trading-Signal-Enum und CSV-Import/Export.
 ## Scraper Package  
 scraper.FXSSIScraper | Web-Scraper für FXSSI Current Ratio Daten. JSoup-basiertes HTML-Parsing mit Fallback-Strategien.
 ## Storage Package
 storage.DataFileManager | CSV-Dateiverwaltung mit täglicher Segmentierung, Backup, Cleanup und Datenvalidierung.
 ## Scheduler Package
 scheduler.HourlyScheduler | Zeitsteuerung für stündliche Ausführung. ScheduledExecutorService mit SafeTaskWrapper für Stabilität.
+## GUI Application Package
+gui.FXSSIGuiApplication | JavaFX Application Entry Point. Hauptfenster-Setup, Error-Handling und ordnungsgemäßes Shutdown.
+## GUI Controller Package
+gui.MainWindowController | Vollständige JavaFX GUI-Controller ohne FXML. Programmatische UI-Erstellung mit Tabellen-Management.
+## GUI Service Package
+gui.GuiDataService | Datenservice für GUI mit 2-Min-Caching, asynchroner Ladung und Fallback auf Demo-Daten.
+## GUI Refresh Package
+gui.DataRefreshManager | Auto-Refresh-Manager für GUI. Konfigurierbare Intervalle (1-60 Min.) und Thread-sichere Ausführung.
+## GUI Custom Cells Package
+gui.RatioBarTableCell | Custom TableCell für horizontale Buy/Sell-Ratio-Balken mit dynamischer Breitenanpassung.
+gui.SignalIconTableCell | Custom TableCell für Trading-Signal-Icons. Kreisförmige Symbole mit Richtungspfeilen.
 ## Test Package
 test.AppTest | Basis-Unit-Test-Klasse für JUnit-Tests.

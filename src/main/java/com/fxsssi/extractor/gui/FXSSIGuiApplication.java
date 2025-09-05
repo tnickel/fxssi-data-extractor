@@ -9,10 +9,10 @@ import java.util.logging.Level;
 
 /**
  * JavaFX Hauptklasse für die FXSSI Data Extractor GUI
- * Vollständige Java-Implementation ohne FXML
+ * Vollständige Java-Implementation ohne FXML mit konfigurierbarem Datenverzeichnis
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.0
+ * @version 1.1 (mit konfigurierbarem Datenverzeichnis)
  */
 public class FXSSIGuiApplication extends Application {
     
@@ -22,16 +22,19 @@ public class FXSSIGuiApplication extends Application {
     private static final int WINDOW_HEIGHT = 800;
     private static final int MIN_WINDOW_WIDTH = 800;
     private static final int MIN_WINDOW_HEIGHT = 600;
+    private static final String DEFAULT_DATA_DIRECTORY = "data";
     
     private MainWindowController mainController;
+    private static String configuredDataDirectory = DEFAULT_DATA_DIRECTORY;
     
     @Override
     public void start(Stage primaryStage) {
         try {
             LOGGER.info("Starte FXSSI GUI Application...");
+            LOGGER.info("Konfiguriertes Datenverzeichnis: " + configuredDataDirectory);
             
-            // Erstelle Main Window Controller
-            mainController = new MainWindowController();
+            // Erstelle Main Window Controller mit konfiguriertem Datenverzeichnis
+            mainController = new MainWindowController(configuredDataDirectory);
             
             // Erstelle Scene programmatisch
             Scene scene = mainController.createMainWindow(primaryStage);
@@ -72,7 +75,13 @@ public class FXSSIGuiApplication extends Application {
      * Konfiguriert das Hauptfenster
      */
     private void setupPrimaryStage(Stage primaryStage, Scene scene) {
-        primaryStage.setTitle(WINDOW_TITLE);
+        // Titel mit Datenverzeichnis-Info erweitern
+        String titleWithPath = WINDOW_TITLE;
+        if (!configuredDataDirectory.equals(DEFAULT_DATA_DIRECTORY)) {
+            titleWithPath += " - Datenverzeichnis: " + configuredDataDirectory;
+        }
+        
+        primaryStage.setTitle(titleWithPath);
         primaryStage.setScene(scene);
         primaryStage.setMinWidth(MIN_WINDOW_WIDTH);
         primaryStage.setMinHeight(MIN_WINDOW_HEIGHT);
@@ -106,7 +115,8 @@ public class FXSSIGuiApplication extends Application {
                 javafx.scene.control.Alert.AlertType.ERROR);
             alert.setTitle("Anwendungsfehler");
             alert.setHeaderText("Die FXSSI GUI konnte nicht gestartet werden");
-            alert.setContentText("Fehler: " + e.getMessage() + "\n\nBitte überprüfen Sie die Logs für weitere Details.");
+            alert.setContentText("Fehler: " + e.getMessage() + "\n\nBitte überprüfen Sie die Logs für weitere Details." +
+                "\n\nDatenverzeichnis: " + configuredDataDirectory);
             alert.showAndWait();
         } catch (Exception alertException) {
             LOGGER.log(Level.SEVERE, "Fehler beim Anzeigen der Fehlermeldung: " + alertException.getMessage(), alertException);
@@ -115,17 +125,60 @@ public class FXSSIGuiApplication extends Application {
     }
     
     /**
-     * Startet die GUI-Anwendung
+     * Setzt das konfigurierte Datenverzeichnis
+     * Diese Methode muss vor dem Start der JavaFX Application aufgerufen werden
+     */
+    public static void setDataDirectory(String dataDirectory) {
+        if (dataDirectory != null && !dataDirectory.trim().isEmpty()) {
+            configuredDataDirectory = dataDirectory.trim();
+            LOGGER.info("Datenverzeichnis für GUI konfiguriert: " + configuredDataDirectory);
+        } else {
+            LOGGER.warning("Ungültiges Datenverzeichnis, verwende Standard: " + DEFAULT_DATA_DIRECTORY);
+            configuredDataDirectory = DEFAULT_DATA_DIRECTORY;
+        }
+    }
+    
+    /**
+     * Gibt das aktuell konfigurierte Datenverzeichnis zurück
+     */
+    public static String getConfiguredDataDirectory() {
+        return configuredDataDirectory;
+    }
+    
+    /**
+     * Startet die GUI-Anwendung mit Standard-Datenverzeichnis
      */
     public static void launchGui(String[] args) {
+        launchGui(args, DEFAULT_DATA_DIRECTORY);
+    }
+    
+    /**
+     * Startet die GUI-Anwendung mit konfiguriertem Datenverzeichnis
+     */
+    public static void launchGui(String[] args, String dataDirectory) {
         LOGGER.info("Starte JavaFX GUI für FXSSI Data Extractor...");
+        LOGGER.info("Datenverzeichnis: " + dataDirectory);
+        
+        // Setze das Datenverzeichnis vor dem Start
+        setDataDirectory(dataDirectory);
+        
         launch(args);
     }
     
     /**
-     * Hauptmethode für GUI-only Ausführung
+     * Hauptmethode für GUI-only Ausführung mit Standard-Datenverzeichnis
      */
     public static void main(String[] args) {
-        launchGui(args);
+        // Parse mögliche Datenverzeichnis-Argumente auch für direkten GUI-Start
+        String dataDir = DEFAULT_DATA_DIRECTORY;
+        
+        for (int i = 0; i < args.length; i++) {
+            if ("--data-dir".equals(args[i]) && i + 1 < args.length) {
+                dataDir = args[i + 1];
+                break;
+            }
+        }
+        
+        launchGui(args, dataDir);
     }
 }

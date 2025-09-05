@@ -34,15 +34,16 @@ import javafx.util.Callback;
 
 /**
  * Vollständige Java-GUI für das FXSSI Data Extractor Hauptfenster
- * Erstellt alle UI-Komponenten programmatisch ohne FXML
+ * Erstellt alle UI-Komponenten programmatisch ohne FXML mit konfigurierbarem Datenverzeichnis
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.0
+ * @version 1.1 (mit konfigurierbarem Datenverzeichnis)
  */
 public class MainWindowController {
     
     private static final Logger LOGGER = Logger.getLogger(MainWindowController.class.getName());
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm:ss");
+    private static final String DEFAULT_DATA_DIRECTORY = "data";
     
     // UI-Komponenten
     private Stage stage;
@@ -59,6 +60,7 @@ public class MainWindowController {
     // Steuerelemente
     private Label statusLabel;
     private Label lastUpdateLabel;
+    private Label dataDirectoryLabel;
     private Button refreshButton;
     private Spinner<Integer> refreshIntervalSpinner;
     private CheckBox autoRefreshCheckBox;
@@ -66,6 +68,23 @@ public class MainWindowController {
     // Services
     private DataRefreshManager refreshManager;
     private GuiDataService dataService;
+    private String dataDirectory;
+    
+    /**
+     * Konstruktor mit Standard-Datenverzeichnis
+     */
+    public MainWindowController() {
+        this(DEFAULT_DATA_DIRECTORY);
+    }
+    
+    /**
+     * Konstruktor mit konfigurierbarem Datenverzeichnis
+     * @param dataDirectory Pfad zum Datenverzeichnis
+     */
+    public MainWindowController(String dataDirectory) {
+        this.dataDirectory = validateDataDirectory(dataDirectory);
+        LOGGER.info("MainWindowController erstellt mit Datenverzeichnis: " + this.dataDirectory);
+    }
     
     /**
      * Erstellt und konfiguriert das komplette Hauptfenster
@@ -74,10 +93,11 @@ public class MainWindowController {
         this.stage = primaryStage;
         
         LOGGER.info("Erstelle Hauptfenster programmatisch...");
+        LOGGER.info("Datenverzeichnis: " + dataDirectory);
         
         // Initialisiere Datenstrukturen
         tableData = FXCollections.observableArrayList();
-        dataService = new GuiDataService();
+        dataService = new GuiDataService(dataDirectory);
         refreshManager = new DataRefreshManager(this::refreshData);
         
         // Erstelle Root-Layout
@@ -222,7 +242,12 @@ public class MainWindowController {
         lastUpdateLabel.setFont(Font.font(10));
         lastUpdateLabel.getStyleClass().add("last-update-label");
         
-        statusArea.getChildren().addAll(statusLabel, lastUpdateLabel);
+        // Datenverzeichnis-Anzeige
+        dataDirectoryLabel = new Label("Datenverzeichnis: " + dataDirectory);
+        dataDirectoryLabel.setFont(Font.font(9));
+        dataDirectoryLabel.getStyleClass().add("data-directory-label");
+        
+        statusArea.getChildren().addAll(statusLabel, lastUpdateLabel, dataDirectoryLabel);
         return statusArea;
     }
     
@@ -334,7 +359,11 @@ public class MainWindowController {
         placeholderHint.setFont(Font.font(12));
         placeholderHint.getStyleClass().add("placeholder-hint");
         
-        placeholder.getChildren().addAll(placeholderText, placeholderHint);
+        Label dataDirectoryHint = new Label("Datenverzeichnis: " + dataDirectory);
+        dataDirectoryHint.setFont(Font.font(10));
+        dataDirectoryHint.getStyleClass().add("placeholder-hint-small");
+        
+        placeholder.getChildren().addAll(placeholderText, placeholderHint, dataDirectoryHint);
         return placeholder;
     }
     
@@ -347,7 +376,7 @@ public class MainWindowController {
         bottomArea.setPadding(new Insets(5, 20, 5, 20));
         bottomArea.getStyleClass().add("status-bar");
         
-        Label appInfo = new Label("FXSSI Data Extractor v1.0");
+        Label appInfo = new Label("FXSSI Data Extractor v1.1");
         appInfo.setFont(Font.font(10));
         appInfo.getStyleClass().add("app-info");
         
@@ -358,6 +387,14 @@ public class MainWindowController {
         appDescription.setFont(Font.font(10));
         appDescription.getStyleClass().add("app-description");
         
+        Separator separator2 = new Separator();
+        separator2.setOrientation(javafx.geometry.Orientation.VERTICAL);
+        
+        Label dataDirectoryInfo = new Label("Daten: " + 
+            (dataDirectory.length() > 30 ? "..." + dataDirectory.substring(dataDirectory.length() - 27) : dataDirectory));
+        dataDirectoryInfo.setFont(Font.font(10));
+        dataDirectoryInfo.getStyleClass().add("data-directory-info");
+        
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
@@ -366,7 +403,7 @@ public class MainWindowController {
         dataSource.getStyleClass().add("data-source");
         
         bottomArea.getChildren().addAll(
-            appInfo, separator1, appDescription, spacer, dataSource
+            appInfo, separator1, appDescription, separator2, dataDirectoryInfo, spacer, dataSource
         );
         
         return bottomArea;
@@ -387,7 +424,7 @@ public class MainWindowController {
                 refreshManager.startAutoRefresh(refreshIntervalSpinner.getValue());
             }
             
-            LOGGER.info("Datenservice gestartet");
+            LOGGER.info("Datenservice gestartet mit Datenverzeichnis: " + dataDirectory);
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Fehler beim Starten des Datenservice: " + e.getMessage(), e);
             updateStatus("Fehler beim Starten des Datenservice: " + e.getMessage());
@@ -470,6 +507,13 @@ public class MainWindowController {
     }
     
     /**
+     * Gibt das konfigurierte Datenverzeichnis zurück
+     */
+    public String getDataDirectory() {
+        return dataDirectory;
+    }
+    
+    /**
      * Setzt die Stage-Referenz
      */
     public void setStage(Stage stage) {
@@ -495,6 +539,17 @@ public class MainWindowController {
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Fehler beim Herunterfahren: " + e.getMessage(), e);
         }
+    }
+    
+    /**
+     * Validiert das Datenverzeichnis
+     */
+    private String validateDataDirectory(String directory) {
+        if (directory == null || directory.trim().isEmpty()) {
+            LOGGER.warning("Leeres Datenverzeichnis angegeben, verwende Standard: " + DEFAULT_DATA_DIRECTORY);
+            return DEFAULT_DATA_DIRECTORY;
+        }
+        return directory.trim();
     }
     
     /**

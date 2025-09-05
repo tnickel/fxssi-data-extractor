@@ -1,7 +1,5 @@
 package com.fxsssi.extractor.gui;
 
-
-
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -16,15 +14,15 @@ import com.fxssi.extractor.storage.DataFileManager;
 
 /**
  * Service-Klasse für die Bereitstellung von FXSSI-Daten für die GUI
- * Integriert die bestehenden Scraper- und Storage-Komponenten
+ * Integriert die bestehenden Scraper- und Storage-Komponenten mit konfigurierbarem Datenverzeichnis
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.0
+ * @version 1.1 (mit konfigurierbarem Datenverzeichnis)
  */
 public class GuiDataService {
     
     private static final Logger LOGGER = Logger.getLogger(GuiDataService.class.getName());
-    private static final String DATA_DIRECTORY = "data";
+    private static final String DEFAULT_DATA_DIRECTORY = "data";
     private static final int CACHE_TIMEOUT_MINUTES = 2; // Cache-Timeout in Minuten
     
     private FXSSIScraper scraper;
@@ -32,13 +30,23 @@ public class GuiDataService {
     private List<CurrencyPairData> cachedData;
     private LocalDateTime lastCacheUpdate;
     private boolean isInitialized = false;
+    private String dataDirectory;
     
     /**
-     * Konstruktor
+     * Konstruktor mit Standard-Datenverzeichnis
      */
     public GuiDataService() {
+        this(DEFAULT_DATA_DIRECTORY);
+    }
+    
+    /**
+     * Konstruktor mit konfigurierbarem Datenverzeichnis
+     * @param dataDirectory Pfad zum Datenverzeichnis
+     */
+    public GuiDataService(String dataDirectory) {
+        this.dataDirectory = validateAndNormalizeDataDirectory(dataDirectory);
         this.cachedData = new ArrayList<>();
-        LOGGER.info("GuiDataService erstellt");
+        LOGGER.info("GuiDataService erstellt mit Datenverzeichnis: " + this.dataDirectory);
     }
     
     /**
@@ -47,10 +55,11 @@ public class GuiDataService {
     public void initialize() {
         try {
             LOGGER.info("Initialisiere GuiDataService...");
+            LOGGER.info("Datenverzeichnis: " + dataDirectory);
             
             // Initialisiere Komponenten
             scraper = new FXSSIScraper();
-            fileManager = new DataFileManager(DATA_DIRECTORY);
+            fileManager = new DataFileManager(dataDirectory);
             
             // Erstelle Datenverzeichnis
             fileManager.createDataDirectory();
@@ -181,6 +190,13 @@ public class GuiDataService {
     }
     
     /**
+     * Gibt das konfigurierte Datenverzeichnis zurück
+     */
+    public String getDataDirectory() {
+        return dataDirectory;
+    }
+    
+    /**
      * Gibt Statistiken über gespeicherte Daten zurück
      */
     public DataStatistics getDataStatistics() {
@@ -193,7 +209,8 @@ public class GuiDataService {
             List<String> files = fileManager.listDataFiles();
             List<CurrencyPairData> todayData = fileManager.readTodayData();
             
-            return new DataStatistics(files.size(), todayData.size(), stats);
+            String detailedStats = String.format("%s, Datenverzeichnis: %s", stats, dataDirectory);
+            return new DataStatistics(files.size(), todayData.size(), detailedStats);
             
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Fehler beim Abrufen der Statistiken: " + e.getMessage(), e);
@@ -236,6 +253,32 @@ public class GuiDataService {
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Fehler beim Herunterfahren des GuiDataService: " + e.getMessage(), e);
         }
+    }
+    
+    /**
+     * Validiert und normalisiert das Datenverzeichnis
+     */
+    private String validateAndNormalizeDataDirectory(String directory) {
+        if (directory == null || directory.trim().isEmpty()) {
+            LOGGER.warning("Leeres Datenverzeichnis angegeben, verwende Standard: " + DEFAULT_DATA_DIRECTORY);
+            return DEFAULT_DATA_DIRECTORY;
+        }
+        
+        String normalized = directory.trim();
+        
+        // Entferne abschließende Pfad-Separatoren
+        while (normalized.endsWith("/") || normalized.endsWith("\\")) {
+            normalized = normalized.substring(0, normalized.length() - 1);
+        }
+        
+        // Falls leer nach Normalisierung, verwende Standard
+        if (normalized.isEmpty()) {
+            LOGGER.warning("Ungültiges Datenverzeichnis nach Normalisierung, verwende Standard: " + DEFAULT_DATA_DIRECTORY);
+            return DEFAULT_DATA_DIRECTORY;
+        }
+        
+        LOGGER.info("Datenverzeichnis validiert: " + normalized);
+        return normalized;
     }
     
     /**
