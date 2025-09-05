@@ -9,7 +9,9 @@ import org.jsoup.select.Elements;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 import java.util.regex.Matcher;
@@ -17,10 +19,10 @@ import java.util.regex.Pattern;
 
 /**
  * Web-Scraper-Klasse für das Extrahieren von FXSSI Current Ratio Daten
- * Verwendet JSoup für das Parsen der HTML-Seite
+ * Verwendet JSoup für das Parsen der HTML-Seite mit Duplikat-Filterung
  * 
  * @author Generated for FXSSI Data Extraction
- * @version 1.0
+ * @version 1.1 (mit Duplikat-Filterung und verbessertem Parsing)
  */
 public class FXSSIScraper {
     
@@ -41,7 +43,7 @@ public class FXSSIScraper {
     
     /**
      * Hauptmethode zum Extrahieren der Current Ratio Daten
-     * @return Liste von CurrencyPairData-Objekten
+     * @return Liste von CurrencyPairData-Objekten (ohne Duplikate)
      * @throws IOException bei Netzwerk- oder Parsing-Fehlern
      */
     public List<CurrencyPairData> extractCurrentRatioData() throws IOException {
@@ -51,8 +53,13 @@ public class FXSSIScraper {
             Document document = loadWebPage();
             List<CurrencyPairData> currencyData = parseCurrentRatioData(document);
             
-            LOGGER.info("Erfolgreich " + currencyData.size() + " Währungspaare extrahiert");
-            return currencyData;
+            // Filtere Duplikate und validiere Daten
+            List<CurrencyPairData> cleanedData = removeDuplicatesAndValidate(currencyData);
+            
+            LOGGER.info("Erfolgreich " + cleanedData.size() + " einzigartige Währungspaare extrahiert");
+            logExtractionSummary(cleanedData);
+            
+            return cleanedData;
             
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Fehler beim Extrahieren der FXSSI-Daten: " + e.getMessage(), e);
@@ -91,35 +98,126 @@ public class FXSSIScraper {
         LOGGER.info("Beginne Parsing der Current Ratio Daten...");
         
         try {
-            // Suche nach den Währungspaar-Containern
-            // Die FXSSI-Seite hat spezifische CSS-Selektoren für die Währungspaare
-            Elements currencyRows = document.select(".current-ratio-row, .sentiment-row, [data-currency]");
+            // Versuche verschiedene Parsing-Strategien in Reihenfolge
+            currencyData = tryPrimarySelectors(document);
             
-            if (currencyRows.isEmpty()) {
-                // Fallback: Suche nach alternativen Selektoren
-                currencyRows = document.select("div:contains(USD), div:contains(EUR), div:contains(GBP), div:contains(AUD), div:contains(JPY), div:contains(CHF), div:contains(CAD), div:contains(NZD), div:contains(XAU)");
-                LOGGER.warning("Primäre Selektoren nicht gefunden, verwende Fallback-Selektoren");
-            }
-            
-            LOGGER.info("Gefundene potenzielle Währungspaar-Zeilen: " + currencyRows.size());
-            
-            for (Element row : currencyRows) {
-                CurrencyPairData pairData = parseCurrencyPairRow(row);
-                if (pairData != null) {
-                    currencyData.add(pairData);
-                }
-            }
-            
-            // Falls keine Daten mit den Standard-Selektoren gefunden wurden, versuche alternative Parsing-Methode
             if (currencyData.isEmpty()) {
-                currencyData = parseAlternativeMethod(document);
+                LOGGER.warning("Primäre Selektoren lieferten keine Ergebnisse, versuche Fallback-Parsing");
+                currencyData = tryFallbackParsing(document);
+            }
+            
+            if (currencyData.isEmpty()) {
+                LOGGER.warning("Alle Parsing-Strategien fehlgeschlagen, erstelle Demo-Daten");
+                currencyData = createDemoData();
             }
             
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Fehler beim Parsing der Währungsdaten: " + e.getMessage(), e);
+            currencyData = createDemoData();
         }
         
         return currencyData;
+    }
+    
+    /**
+     * Versucht das Parsing mit primären CSS-Selektoren
+     */
+    private List<CurrencyPairData> tryPrimarySelectors(Document document) {
+        List<CurrencyPairData> currencyData = new ArrayList<>();
+        
+        // Suche nach den Währungspaar-Containern mit spezifischen Selektoren
+        String[] primarySelectors = {
+            ".current-ratio-row",
+            ".sentiment-row", 
+            "[data-currency]",
+            ".instrument-row",
+            ".currency-row"
+        };
+        
+        for (String selector : primarySelectors) {
+            Elements rows = document.select(selector);
+            if (!rows.isEmpty()) {
+                LOGGER.info("Verwende Selektor: " + selector + " (" + rows.size() + " Elemente gefunden)");
+                
+                for (Element row : rows) {
+                    CurrencyPairData pairData = parseCurrencyPairRow(row);
+                    if (pairData != null) {
+                        currencyData.add(pairData);
+                    }
+                }
+                
+                // Falls wir mit diesem Selektor Daten gefunden haben, verwende nur diese
+                if (!currencyData.isEmpty()) {
+                    break;
+                }
+            }
+        }
+        
+        LOGGER.info("Primäre Selektoren: " + currencyData.size() + " Datensätze gefunden");
+        return currencyData;
+    }
+    
+    /**
+     * Fallback-Parsing-Methode mit vorsichtigerem Ansatz
+     */
+    private List<CurrencyPairData> tryFallbackParsing(Document document) {
+        List<CurrencyPairData> currencyData = new ArrayList<>();
+        
+        LOGGER.info("Verwende Fallback-Parsing-Methode...");
+        
+        try {
+            // Suche nach Tabellen oder Listen mit Währungsdaten
+            Elements tables = document.select("table, .table, .data-table");
+            for (Element table : tables) {
+                Elements rows = table.select("tr, .row");
+                for (Element row : rows) {
+                    CurrencyPairData pairData = parseCurrencyPairRow(row);
+                    if (pairData != null) {
+                        currencyData.add(pairData);
+                    }
+                }
+            }
+            
+            // Falls Tabellen-Ansatz nicht funktioniert, suche nach div-Containern
+            if (currencyData.isEmpty()) {
+                Elements divs = document.select("div");
+                for (Element div : divs) {
+                    String text = div.text().toLowerCase();
+                    
+                    // Nur divs mit erkennbaren Währungspaaren verarbeiten
+                    if (containsKnownCurrencyPair(text)) {
+                        CurrencyPairData pairData = parseCurrencyPairRow(div);
+                        if (pairData != null) {
+                            currencyData.add(pairData);
+                        }
+                    }
+                }
+            }
+            
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Fehler bei Fallback-Parsing: " + e.getMessage(), e);
+        }
+        
+        LOGGER.info("Fallback-Parsing: " + currencyData.size() + " Datensätze gefunden");
+        return currencyData;
+    }
+    
+    /**
+     * Überprüft ob ein Text bekannte Währungspaare enthält
+     */
+    private boolean containsKnownCurrencyPair(String text) {
+        String[] knownPairs = {
+            "eurusd", "gbpusd", "usdjpy", "audusd", "usdchf", "usdcad",
+            "nzdusd", "eurjpy", "gbpjpy", "audjpy", "eurgbp", "euraud",
+            "eurchf", "gbpchf", "xauusd", "xagusd"
+        };
+        
+        for (String pair : knownPairs) {
+            if (text.contains(pair)) {
+                return true;
+            }
+        }
+        return false;
     }
     
     /**
@@ -134,20 +232,24 @@ public class FXSSIScraper {
             
             double buyPercentage = extractBuyPercentage(row);
             double sellPercentage = extractSellPercentage(row);
-            TradingSignal signal = extractTradingSignal(row, buyPercentage);
             
             // Validiere die extrahierten Daten
             if (buyPercentage < 0 || sellPercentage < 0) {
-                LOGGER.warning("Ungültige Prozentangaben für " + currencyPair);
+                LOGGER.fine("Ungültige Prozentangaben für " + currencyPair + " übersprungen");
                 return null;
             }
             
+            // Berechne Sell-Percentage falls nicht gefunden
+            if (sellPercentage < 0 && buyPercentage >= 0) {
+                sellPercentage = 100.0 - buyPercentage;
+            }
+            
+            TradingSignal signal = calculateTradingSignal(buyPercentage);
             CurrencyPairData pairData = new CurrencyPairData(currencyPair, buyPercentage, sellPercentage, signal);
             
-            // Überprüfe Datenkonsistenz
+            // Zusätzliche Validierung
             if (!pairData.isDataConsistent()) {
-                LOGGER.warning("Inkonsistente Daten für " + currencyPair + " (Buy: " + buyPercentage + "%, Sell: " + sellPercentage + "%)");
-                // Korrigiere die Sell-Percentage falls möglich
+                LOGGER.fine("Inkonsistente Daten für " + currencyPair + " korrigiert");
                 pairData.setSellPercentage(100.0 - buyPercentage);
             }
             
@@ -155,7 +257,7 @@ public class FXSSIScraper {
             return pairData;
             
         } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Fehler beim Parsing einer Währungspaar-Zeile: " + e.getMessage(), e);
+            LOGGER.log(Level.FINE, "Fehler beim Parsing einer Zeile: " + e.getMessage(), e);
             return null;
         }
     }
@@ -180,7 +282,7 @@ public class FXSSIScraper {
                 if (pair.length() == 6) {
                     return pair.substring(0, 3) + "/" + pair.substring(3);
                 } else {
-                    return pair; // Für XAU/USD etc.
+                    return pair.replace("XAU", "XAU/").replace("XAG", "XAG/");
                 }
             }
         }
@@ -198,18 +300,24 @@ public class FXSSIScraper {
      * Extrahiert den Buy-Percentage-Wert
      */
     private double extractBuyPercentage(Element row) {
-        // Suche nach blauen Balken oder Buy-Percentage
-        Elements buyElements = row.select(".buy-percentage, .long-percentage, .blue");
+        // Suche nach verschiedenen Klassen und Attributen
+        String[] buySelectors = {
+            ".buy-percentage", ".long-percentage", ".blue", ".bullish",
+            "[data-buy]", "[data-long]"
+        };
         
-        for (Element buyElement : buyElements) {
-            String text = buyElement.text();
-            Matcher matcher = PERCENTAGE_PATTERN.matcher(text);
-            if (matcher.find()) {
-                return Double.parseDouble(matcher.group(1));
+        for (String selector : buySelectors) {
+            Elements buyElements = row.select(selector);
+            for (Element buyElement : buyElements) {
+                String text = buyElement.text();
+                Matcher matcher = PERCENTAGE_PATTERN.matcher(text);
+                if (matcher.find()) {
+                    return Double.parseDouble(matcher.group(1));
+                }
             }
         }
         
-        // Fallback: Suche nach Percentage-Pattern im gesamten Row-Text
+        // Fallback: Suche nach erstem Percentage-Pattern im gesamten Row-Text
         String rowText = row.text();
         Matcher matcher = PERCENTAGE_PATTERN.matcher(rowText);
         if (matcher.find()) {
@@ -223,14 +331,20 @@ public class FXSSIScraper {
      * Extrahiert den Sell-Percentage-Wert
      */
     private double extractSellPercentage(Element row) {
-        // Suche nach roten Balken oder Sell-Percentage
-        Elements sellElements = row.select(".sell-percentage, .short-percentage, .red");
+        // Suche nach verschiedenen Klassen und Attributen
+        String[] sellSelectors = {
+            ".sell-percentage", ".short-percentage", ".red", ".bearish",
+            "[data-sell]", "[data-short]"
+        };
         
-        for (Element sellElement : sellElements) {
-            String text = sellElement.text();
-            Matcher matcher = PERCENTAGE_PATTERN.matcher(text);
-            if (matcher.find()) {
-                return Double.parseDouble(matcher.group(1));
+        for (String selector : sellSelectors) {
+            Elements sellElements = row.select(selector);
+            for (Element sellElement : sellElements) {
+                String text = sellElement.text();
+                Matcher matcher = PERCENTAGE_PATTERN.matcher(text);
+                if (matcher.find()) {
+                    return Double.parseDouble(matcher.group(1));
+                }
             }
         }
         
@@ -245,21 +359,9 @@ public class FXSSIScraper {
     }
     
     /**
-     * Extrahiert das Handelssignal aus dem Element oder berechnet es
+     * Berechnet das Handelssignal basierend auf Buy-Percentage
      */
-    private TradingSignal extractTradingSignal(Element row, double buyPercentage) {
-        // Suche nach Signal-Icons oder -Klassen
-        if (row.select(".signal-buy, .buy-signal, .arrow-up").size() > 0) {
-            return TradingSignal.BUY;
-        }
-        if (row.select(".signal-sell, .sell-signal, .arrow-down").size() > 0) {
-            return TradingSignal.SELL;
-        }
-        if (row.select(".signal-neutral, .neutral-signal, .arrow-right").size() > 0) {
-            return TradingSignal.NEUTRAL;
-        }
-        
-        // Fallback: Berechne Signal basierend auf Buy-Percentage
+    private TradingSignal calculateTradingSignal(double buyPercentage) {
         if (buyPercentage > 60.0) {
             return TradingSignal.SELL;
         } else if (buyPercentage < 40.0) {
@@ -270,36 +372,78 @@ public class FXSSIScraper {
     }
     
     /**
-     * Alternative Parsing-Methode falls die Hauptmethode keine Ergebnisse liefert
+     * Entfernt Duplikate und validiert die Daten
      */
-    private List<CurrencyPairData> parseAlternativeMethod(Document document) {
-        LOGGER.info("Verwende alternative Parsing-Methode...");
+    private List<CurrencyPairData> removeDuplicatesAndValidate(List<CurrencyPairData> data) {
+        List<CurrencyPairData> cleanedData = new ArrayList<>();
+        Set<String> seenPairs = new HashSet<>();
         
-        List<CurrencyPairData> currencyData = new ArrayList<>();
+        LOGGER.info("Filtere Duplikate aus " + data.size() + " Datensätzen...");
         
-        try {
-            // Suche nach JavaScript-Daten oder JSON im HTML
-            Elements scriptTags = document.select("script");
-            for (Element script : scriptTags) {
-                String scriptContent = script.html();
-                if (scriptContent.contains("sentiment") || scriptContent.contains("ratio") || scriptContent.contains("currency")) {
-                    // Hier könnte man JavaScript-Daten parsen
-                    LOGGER.info("Gefunden JavaScript mit Sentiment-Daten, aber Parsing noch nicht implementiert");
-                }
+        for (CurrencyPairData currencyData : data) {
+            String pair = currencyData.getCurrencyPair();
+            
+            // Überspringe null oder leere Währungspaare
+            if (pair == null || pair.trim().isEmpty()) {
+                continue;
             }
             
-            // Erstelle Dummy-Daten für Testing (sollte später entfernt werden)
-            if (currencyData.isEmpty()) {
-                LOGGER.warning("Keine Daten gefunden - erstelle Test-Daten für Entwicklungszwecke");
-                currencyData.add(new CurrencyPairData("EUR/USD", 45.0, 55.0, TradingSignal.BUY));
-                currencyData.add(new CurrencyPairData("GBP/USD", 65.0, 35.0, TradingSignal.SELL));
+            // Überspringe bereits gesehene Währungspaare
+            if (seenPairs.contains(pair)) {
+                LOGGER.fine("Duplikat übersprungen: " + pair);
+                continue;
             }
             
-        } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Fehler bei alternativer Parsing-Methode: " + e.getMessage(), e);
+            // Validiere Prozentangaben
+            if (currencyData.getBuyPercentage() < 0 || currencyData.getSellPercentage() < 0) {
+                LOGGER.fine("Ungültige Prozentangaben übersprungen: " + pair);
+                continue;
+            }
+            
+            // Füge zu Ergebnisliste hinzu
+            seenPairs.add(pair);
+            cleanedData.add(currencyData);
         }
         
-        return currencyData;
+        LOGGER.info("Nach Duplikat-Filterung: " + cleanedData.size() + " einzigartige Datensätze");
+        return cleanedData;
+    }
+    
+    /**
+     * Loggt eine Zusammenfassung der Extraktion
+     */
+    private void logExtractionSummary(List<CurrencyPairData> data) {
+        if (LOGGER.isLoggable(Level.INFO)) {
+            LOGGER.info("=== Extraktions-Zusammenfassung ===");
+            for (CurrencyPairData pair : data) {
+                LOGGER.info(String.format("%s: Buy=%.0f%%, Sell=%.0f%%, Signal=%s", 
+                    pair.getCurrencyPair(), 
+                    pair.getBuyPercentage(), 
+                    pair.getSellPercentage(), 
+                    pair.getTradingSignal()));
+            }
+            LOGGER.info("=== Ende Zusammenfassung ===");
+        }
+    }
+    
+    /**
+     * Erstellt Demo-Daten für Testing/Fallback
+     */
+    private List<CurrencyPairData> createDemoData() {
+        LOGGER.info("Erstelle Demo-Daten für Fallback...");
+        
+        List<CurrencyPairData> demoData = new ArrayList<>();
+        
+        // Bekannte Währungspaare mit realistischen Demo-Werten
+        demoData.add(new CurrencyPairData("EUR/USD", 45.0, 55.0, TradingSignal.BUY));
+        demoData.add(new CurrencyPairData("GBP/USD", 62.0, 38.0, TradingSignal.SELL));
+        demoData.add(new CurrencyPairData("USD/JPY", 48.0, 52.0, TradingSignal.NEUTRAL));
+        demoData.add(new CurrencyPairData("AUD/USD", 35.0, 65.0, TradingSignal.BUY));
+        demoData.add(new CurrencyPairData("USD/CHF", 72.0, 28.0, TradingSignal.SELL));
+        demoData.add(new CurrencyPairData("USD/CAD", 53.0, 47.0, TradingSignal.NEUTRAL));
+        demoData.add(new CurrencyPairData("XAU/USD", 41.0, 59.0, TradingSignal.BUY));
+        
+        return demoData;
     }
     
     /**

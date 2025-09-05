@@ -11,16 +11,19 @@ import java.nio.file.StandardOpenOption;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Logger;
 import java.util.logging.Level;
 
 /**
  * Dateimanagement-Klasse für das Speichern und Verwalten der FXSSI-Daten
- * Verwaltet CSV-Dateien im data/ Verzeichnis
+ * Verwaltet CSV-Dateien im data/ Verzeichnis mit verbesserter Duplikat-Behandlung
  * 
  * @author Generated for FXSSI Data Extraction
- * @version 1.0
+ * @version 1.1 (mit Duplikat-Filterung und verbesserter Header-Behandlung)
  */
 public class DataFileManager {
     
@@ -31,6 +34,7 @@ public class DataFileManager {
     
     private final String dataDirectory;
     private final Path dataPath;
+    private final ReentrantLock fileLock = new ReentrantLock();
     
     /**
      * Konstruktor
@@ -60,7 +64,7 @@ public class DataFileManager {
     }
     
     /**
-     * Hängt neue Daten an die heutige Datei an
+     * Hängt neue Daten an die heutige Datei an (mit Duplikat-Filterung)
      * @param currencyData Liste der zu speichernden Währungsdaten
      */
     public void appendDataToFile(List<CurrencyPairData> currencyData) {
@@ -69,36 +73,161 @@ public class DataFileManager {
             return;
         }
         
-        String filename = generateTodayFilename();
-        Path filePath = dataPath.resolve(filename);
-        
+        // Thread-sichere Ausführung
+        fileLock.lock();
         try {
-            boolean fileExists = Files.exists(filePath);
+            String filename = generateTodayFilename();
+            Path filePath = dataPath.resolve(filename);
             
-            // Erstelle oder öffne die Datei
-            try (BufferedWriter writer = Files.newBufferedWriter(filePath, StandardCharsets.UTF_8,
-                    StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
-                
-                // Schreibe Header falls neue Datei
-                if (!fileExists) {
-                    writer.write(CurrencyPairData.getCsvHeader());
-                    writer.newLine();
-                    LOGGER.info("Neue Datei erstellt mit Header: " + filename);
-                }
-                
-                // Schreibe Datenzeilen
-                for (CurrencyPairData data : currencyData) {
-                    writer.write(data.toCsvLine());
-                    writer.newLine();
-                }
-                
-                writer.flush();
-                LOGGER.info("Erfolgreich " + currencyData.size() + " Datensätze in " + filename + " gespeichert");
+            LOGGER.info("Beginne Speicherung von " + currencyData.size() + " Datensätzen in " + filename);
+            
+            // Filtere Duplikate basierend auf bereits existierenden Daten
+            List<CurrencyPairData> filteredData = filterDuplicates(currencyData, filePath);
+            
+            if (filteredData.isEmpty()) {
+                LOGGER.info("Alle Daten bereits vorhanden - keine neuen Datensätze zu speichern");
+                return;
             }
             
-        } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Fehler beim Schreiben in Datei " + filename + ": " + e.getMessage(), e);
+            // Prüfe ob Header benötigt wird (neue Datei oder leere Datei)
+            boolean needsHeader = needsHeaderCheck(filePath);
+            
+            // Schreibe Daten
+            writeDataToFile(filePath, filteredData, needsHeader);
+            
+            LOGGER.info("Erfolgreich " + filteredData.size() + " neue Datensätze in " + filename + " gespeichert");
+            
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Fehler beim Speichern der Daten: " + e.getMessage(), e);
             throw new RuntimeException("Konnte Daten nicht speichern", e);
+        } finally {
+            fileLock.unlock();
+        }
+    }
+    
+    /**
+     * Filtert Duplikate basierend auf bereits existierenden Daten
+     */
+    private List<CurrencyPairData> filterDuplicates(List<CurrencyPairData> newData, Path filePath) {
+        List<CurrencyPairData> filteredData = new ArrayList<>();
+        
+        try {
+            // Lade existierende Daten falls Datei existiert
+            Set<String> existingEntries = new HashSet<>();
+            
+            if (Files.exists(filePath)) {
+                List<CurrencyPairData> existingData = readDataFromPath(filePath);
+                
+                // Erstelle Set von existierenden Einträgen (basierend auf Zeitstempel + Währungspaar)
+                for (CurrencyPairData data : existingData) {
+                    String entryKey = createEntryKey(data);
+                    existingEntries.add(entryKey);
+                }
+                
+                LOGGER.fine("Geladene existierende Einträge: " + existingEntries.size());
+            }
+            
+            // Filtere neue Daten
+            Set<String> seenInNewData = new HashSet<>();
+            
+            for (CurrencyPairData data : newData) {
+                String entryKey = createEntryKey(data);
+                
+                // Überspringe wenn bereits in Datei vorhanden
+                if (existingEntries.contains(entryKey)) {
+                    LOGGER.fine("Duplikat übersprungen (bereits in Datei): " + data.getCurrencyPair());
+                    continue;
+                }
+                
+                // Überspringe wenn bereits in neuen Daten vorhanden
+                if (seenInNewData.contains(entryKey)) {
+                    LOGGER.fine("Duplikat übersprungen (bereits in neuen Daten): " + data.getCurrencyPair());
+                    continue;
+                }
+                
+                seenInNewData.add(entryKey);
+                filteredData.add(data);
+            }
+            
+            LOGGER.info("Duplikat-Filterung: " + newData.size() + " -> " + filteredData.size() + " Datensätze");
+            
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Fehler bei Duplikat-Filterung, verwende alle Daten: " + e.getMessage(), e);
+            return new ArrayList<>(newData);
+        }
+        
+        return filteredData;
+    }
+    
+    /**
+     * Erstellt einen eindeutigen Schlüssel für einen Datensatz
+     */
+    private String createEntryKey(CurrencyPairData data) {
+        // Verwende Zeitstempel (auf Minute genau) + Währungspaar + Buy-Percentage
+        DateTimeFormatter keyFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+        return data.getTimestamp().format(keyFormatter) + "|" + data.getCurrencyPair() + "|" + String.format("%.0f", data.getBuyPercentage());
+    }
+    
+    /**
+     * Prüft ob ein Header benötigt wird
+     */
+    private boolean needsHeaderCheck(Path filePath) {
+        try {
+            if (!Files.exists(filePath)) {
+                return true; // Neue Datei
+            }
+            
+            // Prüfe ob Datei leer oder nur Whitespace enthält
+            long fileSize = Files.size(filePath);
+            if (fileSize == 0) {
+                return true; // Leere Datei
+            }
+            
+            // Prüfe die erste Zeile
+            try (BufferedReader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8)) {
+                String firstLine = reader.readLine();
+                
+                if (firstLine == null || firstLine.trim().isEmpty()) {
+                    return true; // Datei ist praktisch leer
+                }
+                
+                // Prüfe ob erste Zeile bereits Header ist
+                if (firstLine.equals(CurrencyPairData.getCsvHeader())) {
+                    return false; // Header bereits vorhanden
+                } else {
+                    LOGGER.warning("Datei " + filePath.getFileName() + " hat keinen gültigen Header: " + firstLine);
+                    return false; // Hat Daten aber falschen Header - füge keinen Header hinzu um Datei nicht zu beschädigen
+                }
+            }
+            
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Fehler bei Header-Prüfung: " + e.getMessage(), e);
+            return false; // Im Zweifel keinen Header hinzufügen
+        }
+    }
+    
+    /**
+     * Schreibt Daten in die Datei
+     */
+    private void writeDataToFile(Path filePath, List<CurrencyPairData> data, boolean needsHeader) throws IOException {
+        try (BufferedWriter writer = Files.newBufferedWriter(filePath, StandardCharsets.UTF_8,
+                StandardOpenOption.CREATE, StandardOpenOption.APPEND)) {
+            
+            // Schreibe Header falls benötigt
+            if (needsHeader) {
+                writer.write(CurrencyPairData.getCsvHeader());
+                writer.newLine();
+                LOGGER.info("Header geschrieben für: " + filePath.getFileName());
+            }
+            
+            // Schreibe Datenzeilen
+            for (CurrencyPairData currencyData : data) {
+                writer.write(currencyData.toCsvLine());
+                writer.newLine();
+            }
+            
+            writer.flush();
+            LOGGER.fine("Daten erfolgreich geschrieben");
         }
     }
     
@@ -109,36 +238,52 @@ public class DataFileManager {
      */
     public List<CurrencyPairData> readDataFromFile(String filename) {
         Path filePath = dataPath.resolve(filename);
+        return readDataFromPath(filePath);
+    }
+    
+    /**
+     * Liest Daten aus einem spezifischen Pfad
+     */
+    private List<CurrencyPairData> readDataFromPath(Path filePath) {
         List<CurrencyPairData> currencyData = new ArrayList<>();
         
         if (!Files.exists(filePath)) {
-            LOGGER.warning("Datei existiert nicht: " + filename);
+            LOGGER.fine("Datei existiert nicht: " + filePath.getFileName());
             return currencyData;
         }
         
         try (BufferedReader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8)) {
             String line;
             boolean isFirstLine = true;
+            int lineNumber = 1;
             
             while ((line = reader.readLine()) != null) {
+                lineNumber++;
+                
                 // Überspringe Header-Zeile
                 if (isFirstLine) {
                     isFirstLine = false;
-                    continue;
+                    if (line.equals(CurrencyPairData.getCsvHeader())) {
+                        continue; // Gültiger Header
+                    } else {
+                        // Erste Zeile ist kein Header, behandle als Datenzeile
+                        LOGGER.fine("Keine Header-Zeile gefunden, beginne mit Datenzeile 1");
+                        lineNumber = 1; // Reset für korrekte Zeilennummerierung
+                    }
                 }
                 
                 try {
                     CurrencyPairData data = CurrencyPairData.fromCsvLine(line);
                     currencyData.add(data);
                 } catch (IllegalArgumentException e) {
-                    LOGGER.warning("Ungültige CSV-Zeile übersprungen: " + line);
+                    LOGGER.fine("Ungültige CSV-Zeile " + lineNumber + " übersprungen: " + line);
                 }
             }
             
-            LOGGER.info("Erfolgreich " + currencyData.size() + " Datensätze aus " + filename + " gelesen");
+            LOGGER.fine("Erfolgreich " + currencyData.size() + " Datensätze aus " + filePath.getFileName() + " gelesen");
             
         } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "Fehler beim Lesen der Datei " + filename + ": " + e.getMessage(), e);
+            LOGGER.log(Level.WARNING, "Fehler beim Lesen der Datei " + filePath.getFileName() + ": " + e.getMessage(), e);
         }
         
         return currencyData;
@@ -176,13 +321,64 @@ public class DataFileManager {
                     .filter(path -> path.getFileName().toString().startsWith(FILE_PREFIX))
                     .forEach(path -> files.add(path.getFileName().toString()));
                     
-            LOGGER.info("Gefundene Datendateien: " + files.size());
+            LOGGER.fine("Gefundene Datendateien: " + files.size());
             
         } catch (IOException e) {
             LOGGER.log(Level.SEVERE, "Fehler beim Auflisten der Datendateien: " + e.getMessage(), e);
         }
         
         return files;
+    }
+    
+    /**
+     * Repariert eine Datei mit doppelten Headern
+     * @param filename Name der zu reparierenden Datei
+     */
+    public void repairFileWithDuplicateHeaders(String filename) {
+        fileLock.lock();
+        try {
+            Path filePath = dataPath.resolve(filename);
+            
+            if (!Files.exists(filePath)) {
+                LOGGER.warning("Datei existiert nicht: " + filename);
+                return;
+            }
+            
+            LOGGER.info("Repariere Datei mit doppelten Headern: " + filename);
+            
+            // Lese alle Zeilen
+            List<String> allLines = Files.readAllLines(filePath, StandardCharsets.UTF_8);
+            List<String> cleanedLines = new ArrayList<>();
+            
+            String header = CurrencyPairData.getCsvHeader();
+            boolean headerAdded = false;
+            
+            for (String line : allLines) {
+                if (line.equals(header)) {
+                    // Header-Zeile gefunden
+                    if (!headerAdded) {
+                        cleanedLines.add(line);
+                        headerAdded = true;
+                        LOGGER.fine("Header hinzugefügt");
+                    } else {
+                        LOGGER.fine("Doppelter Header übersprungen");
+                    }
+                } else if (!line.trim().isEmpty()) {
+                    // Datenzeile
+                    cleanedLines.add(line);
+                }
+            }
+            
+            // Schreibe bereinigte Datei
+            Files.write(filePath, cleanedLines, StandardCharsets.UTF_8);
+            
+            LOGGER.info("Datei repariert: " + filename + " (" + cleanedLines.size() + " Zeilen behalten)");
+            
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Fehler beim Reparieren der Datei: " + e.getMessage(), e);
+        } finally {
+            fileLock.unlock();
+        }
     }
     
     /**
@@ -259,26 +455,39 @@ public class DataFileManager {
         try (BufferedReader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8)) {
             String headerLine = reader.readLine();
             
-            if (headerLine == null || !headerLine.equals(CurrencyPairData.getCsvHeader())) {
-                LOGGER.warning("Ungültiger Header in Datei: " + filename);
+            if (headerLine == null) {
+                LOGGER.warning("Datei ist leer: " + filename);
                 return false;
+            }
+            
+            if (!headerLine.equals(CurrencyPairData.getCsvHeader())) {
+                LOGGER.warning("Ungültiger Header in Datei: " + filename + " ('" + headerLine + "')");
+                // Nicht als invalid markieren, da es alte Dateien geben könnte
             }
             
             String line;
             int lineNumber = 2;
+            int validLines = 0;
+            int invalidLines = 0;
             
             while ((line = reader.readLine()) != null) {
+                if (line.trim().isEmpty()) {
+                    lineNumber++;
+                    continue;
+                }
+                
                 try {
                     CurrencyPairData.fromCsvLine(line);
+                    validLines++;
                 } catch (IllegalArgumentException e) {
-                    LOGGER.warning("Ungültige Zeile " + lineNumber + " in Datei " + filename + ": " + line);
-                    return false;
+                    LOGGER.fine("Ungültige Zeile " + lineNumber + " in Datei " + filename + ": " + line);
+                    invalidLines++;
                 }
                 lineNumber++;
             }
             
-            LOGGER.info("Datei " + filename + " ist gültig");
-            return true;
+            LOGGER.info("Datei " + filename + " validiert: " + validLines + " gültige, " + invalidLines + " ungültige Zeilen");
+            return invalidLines == 0 || (validLines > invalidLines * 10); // Toleriere wenige ungültige Zeilen
             
         } catch (IOException e) {
             LOGGER.log(Level.WARNING, "Fehler beim Validieren der Datei " + filename + ": " + e.getMessage(), e);
@@ -310,7 +519,7 @@ public class DataFileManager {
             DateTimeFormatter formatter = DateTimeFormatter.ofPattern(DATE_FORMAT);
             return LocalDate.parse(dateString, formatter);
         } catch (Exception e) {
-            LOGGER.warning("Konnte Datum nicht aus Dateiname extrahieren: " + filename);
+            LOGGER.fine("Konnte Datum nicht aus Dateiname extrahieren: " + filename);
             return null;
         }
     }
