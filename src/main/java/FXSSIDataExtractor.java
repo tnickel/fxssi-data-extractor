@@ -6,8 +6,8 @@ import com.fxssi.extractor.model.CurrencyPairData;
 import com.fxssi.extractor.scheduler.HourlyScheduler;
 import com.fxssi.extractor.scraper.FXSSIScraper;
 import com.fxssi.extractor.storage.DataFileManager;
+import com.fxssi.extractor.storage.CurrencyPairDataManager;
 import com.fxsssi.extractor.gui.FXSSIGuiApplication;
-import com.fxsssi.extractor.storage.CurrencyPairDataManager;
 
 /**
  * Erweiterte Hauptklasse für das FXSSI Datenextraktions-Programm
@@ -355,10 +355,13 @@ public class FXSSIDataExtractor {
         System.out.println("- Konfigurierbare Auto-Refresh-Intervalle");
         System.out.println("- Interaktive Tabelle mit Ratio-Balken und Signal-Icons");
         System.out.println("- Daten werden bei jedem Refresh in beide Formate gespeichert");
+        System.out.println("- NEUE: Signalwechsel-Erkennung mit visuellen Indikatoren");
+        System.out.println("- NEUE: Klickbare Signalwechsel-Historie pro Währungspaar");
         System.out.println();
         System.out.println("Im Console-Modus:");
         System.out.println("- Automatische stündliche Datenextraktion");
         System.out.println("- Duale CSV-Speicherung im konfigurierten Verzeichnis");
+        System.out.println("- Automatische Signalwechsel-Erkennung und -Logging");
         System.out.println("- Läuft als Hintergrund-Service");
     }
     

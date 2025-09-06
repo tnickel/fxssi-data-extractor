@@ -37,10 +37,10 @@ import javafx.util.Callback;
 /**
  * Vollständige Java-GUI für das FXSSI Data Extractor Hauptfenster
  * Erstellt alle UI-Komponenten programmatisch ohne FXML mit konfigurierbarem Datenverzeichnis
- * Jetzt mit Anzeigen für duale Speicherung (tägliche UND währungspaar-spezifische Dateien)
+ * Jetzt mit Signalwechsel-Spalte für Live-Wechsel-Erkennung
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.3 (mit dualer Speicherung Integration)
+ * @version 1.4 (mit vollständiger Signalwechsel-Integration)
  */
 public class MainWindowController {
     
@@ -58,6 +58,7 @@ public class MainWindowController {
     private TableColumn<CurrencyPairTableRow, String> symbolColumn;
     private TableColumn<CurrencyPairTableRow, CurrencyPairTableRow> ratioColumn;
     private TableColumn<CurrencyPairTableRow, CurrencyPairTableRow> signalColumn;
+    private TableColumn<CurrencyPairTableRow, CurrencyPairTableRow> changeColumn;
     private ObservableList<CurrencyPairTableRow> tableData;
     
     // Steuerelemente
@@ -88,7 +89,7 @@ public class MainWindowController {
     public MainWindowController(String dataDirectory) {
         this.dataDirectory = validateDataDirectory(dataDirectory);
         LOGGER.info("MainWindowController erstellt mit Datenverzeichnis: " + this.dataDirectory);
-        LOGGER.info("Duale Speicherung aktiviert: Tägliche UND währungspaar-spezifische Dateien");
+        LOGGER.info("Signalwechsel-Erkennung aktiviert: Neue Wechsel-Spalte wird angezeigt");
     }
     
     /**
@@ -97,9 +98,8 @@ public class MainWindowController {
     public Scene createMainWindow(Stage primaryStage) {
         this.stage = primaryStage;
         
-        LOGGER.info("Erstelle Hauptfenster programmatisch...");
+        LOGGER.info("Erstelle Hauptfenster mit Signalwechsel-Features...");
         LOGGER.info("Datenverzeichnis: " + dataDirectory);
-        LOGGER.info("Duale Speicherung: Tägliche + währungspaar-spezifische Dateien");
         
         // Initialisiere Datenstrukturen
         tableData = FXCollections.observableArrayList();
@@ -120,13 +120,13 @@ public class MainWindowController {
         root.setCenter(centerArea);
         root.setBottom(bottomArea);
         
-        // Erstelle Scene mit breiterem Fenster für bessere Balken-Sichtbarkeit
-        scene = new Scene(root, 1400, 800); // 200px breiter als vorher
+        // Erstelle Scene mit breiterem Fenster für neue Spalte
+        scene = new Scene(root, 1500, 800); // Noch breiter für Signalwechsel-Spalte
         
         // Lade CSS (falls vorhanden)
         loadStylesheets();
         
-        LOGGER.info("Hauptfenster erfolgreich erstellt (1400x800) mit dualer Speicherung");
+        LOGGER.info("Hauptfenster erfolgreich erstellt (1500x800) mit Signalwechsel-Spalte");
         return scene;
     }
     
@@ -158,8 +158,8 @@ public class MainWindowController {
         titleBar.setPadding(new Insets(10, 20, 10, 20));
         titleBar.getStyleClass().add("title-bar");
         
-        Label titleLabel = new Label("FXSSI Live Sentiment Monitor (Duale Speicherung)");
-        titleLabel.setFont(Font.font("System", FontWeight.BOLD, 24));
+        Label titleLabel = new Label("FXSSI Live Sentiment Monitor mit Signalwechsel-Erkennung");
+        titleLabel.setFont(Font.font("System", FontWeight.BOLD, 22));
         titleLabel.getStyleClass().add("title-label");
         
         titleBar.getChildren().add(titleLabel);
@@ -175,8 +175,8 @@ public class MainWindowController {
         toolbar.setPadding(new Insets(10, 20, 10, 20));
         toolbar.getStyleClass().add("toolbar");
         
-        // Refresh-Button (mit Hinweis auf duale Speicherung)
-        refreshButton = new Button("Refresh (Speichert in beide Systeme)");
+        // Refresh-Button (mit Hinweis auf Signalwechsel-Erkennung)
+        refreshButton = new Button("🔄 Refresh + Signalwechsel-Check");
         refreshButton.setFont(Font.font(12));
         refreshButton.getStyleClass().add("refresh-button");
         refreshButton.setOnAction(event -> refreshData());
@@ -198,7 +198,7 @@ public class MainWindowController {
         autoRefreshCheckBox.setOnAction(event -> {
             if (autoRefreshCheckBox.isSelected()) {
                 refreshManager.startAutoRefresh(refreshIntervalSpinner.getValue());
-                LOGGER.info("Auto-Refresh aktiviert - Speicherung in beide Systeme bei jedem Intervall");
+                LOGGER.info("Auto-Refresh aktiviert - Signalwechsel werden automatisch erkannt");
             } else {
                 refreshManager.stopAutoRefresh();
                 LOGGER.info("Auto-Refresh deaktiviert");
@@ -217,7 +217,7 @@ public class MainWindowController {
         refreshIntervalSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
             if (autoRefreshCheckBox.isSelected()) {
                 refreshManager.updateRefreshInterval(newVal);
-                LOGGER.info("Refresh-Intervall geändert auf " + newVal + " Minuten (mit dualer Speicherung)");
+                LOGGER.info("Refresh-Intervall geändert auf " + newVal + " Minuten (mit Signalwechsel-Erkennung)");
             }
         });
         
@@ -256,8 +256,8 @@ public class MainWindowController {
         dataDirectoryLabel.setFont(Font.font(9));
         dataDirectoryLabel.getStyleClass().add("data-directory-label");
         
-        // NEUE: Speicher-Info-Label
-        storageInfoLabel = new Label("Speicherung: Tägliche + Währungspaar-Dateien");
+        // Speicher-Info-Label
+        storageInfoLabel = new Label("Speicherung: Tägliche + Währungspaar + Signalwechsel-Dateien");
         storageInfoLabel.setFont(Font.font(9));
         storageInfoLabel.getStyleClass().add("storage-info-label");
         
@@ -290,14 +290,14 @@ public class MainWindowController {
         HBox headerArea = new HBox(10);
         headerArea.setAlignment(Pos.CENTER_LEFT);
         
-        Label sectionHeader = new Label("Live Currency Sentiment Data");
+        Label sectionHeader = new Label("Live Currency Sentiment Data mit Signalwechsel-Erkennung");
         sectionHeader.setFont(Font.font("System", FontWeight.BOLD, 16));
         sectionHeader.getStyleClass().add("section-header");
         
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        Label sectionDescription = new Label("Buy/Sell Ratios mit dualer Speicherung");
+        Label sectionDescription = new Label("🔄 Klicken Sie auf Wechsel-Icons für Details");
         sectionDescription.setFont(Font.font(12));
         sectionDescription.getStyleClass().add("section-description");
         
@@ -306,7 +306,7 @@ public class MainWindowController {
     }
     
     /**
-     * Erstellt die Currency Table mit breiteren Spalten für bessere Sichtbarkeit
+     * Erstellt die Currency Table mit NEUER Signalwechsel-Spalte
      */
     private TableView<CurrencyPairTableRow> createCurrencyTable() {
         TableView<CurrencyPairTableRow> table = new TableView<>();
@@ -320,12 +320,12 @@ public class MainWindowController {
         symbolColumn.setResizable(false);
         symbolColumn.getStyleClass().add("symbol-column");
         
-        // Ratio-Spalte - breiter für längere Balken
+        // Ratio-Spalte - angepasst für neue Spalte
         ratioColumn = new TableColumn<>("Ratio");
         ratioColumn.setCellValueFactory(cellData -> 
             new javafx.beans.property.SimpleObjectProperty<>(cellData.getValue()));
         ratioColumn.setCellFactory(new RatioBarCellFactory());
-        ratioColumn.setPrefWidth(520); // Erweitert von 400 auf 520 für längere Balken
+        ratioColumn.setPrefWidth(450); // Etwas schmaler für neue Spalte
         ratioColumn.getStyleClass().add("ratio-column");
         
         // Signal-Spalte
@@ -337,8 +337,17 @@ public class MainWindowController {
         signalColumn.setResizable(false);
         signalColumn.getStyleClass().add("signal-column");
         
-        // Spalten zur Tabelle hinzufügen
-        table.getColumns().addAll(symbolColumn, ratioColumn, signalColumn);
+        // NEUE: Signalwechsel-Spalte
+        changeColumn = new TableColumn<>("🔄 Wechsel");
+        changeColumn.setCellValueFactory(cellData -> 
+            new javafx.beans.property.SimpleObjectProperty<>(cellData.getValue()));
+        changeColumn.setCellFactory(new SignalChangeCellFactory());
+        changeColumn.setPrefWidth(100);
+        changeColumn.setResizable(false);
+        changeColumn.getStyleClass().add("change-column");
+        
+        // Spalten zur Tabelle hinzufügen (MIT neuer Wechsel-Spalte)
+        table.getColumns().addAll(symbolColumn, ratioColumn, signalColumn, changeColumn);
         
         // Tabellen-Konfiguration
         table.setItems(tableData);
@@ -355,11 +364,12 @@ public class MainWindowController {
         // Spaltengrößen-Policy
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         
+        LOGGER.info("Tabelle erstellt mit 4 Spalten: Symbol, Ratio, Signal, Wechsel");
         return table;
     }
     
     /**
-     * Erstellt den Placeholder für leere Tabelle mit dualer Speicherung Info
+     * Erstellt den Placeholder für leere Tabelle mit Signalwechsel-Info
      */
     private VBox createTablePlaceholder() {
         VBox placeholder = new VBox(10);
@@ -377,11 +387,15 @@ public class MainWindowController {
         dataDirectoryHint.setFont(Font.font(10));
         dataDirectoryHint.getStyleClass().add("placeholder-hint-small");
         
-        Label storageHint = new Label("Speichert in tägliche UND währungspaar-spezifische Dateien");
+        Label storageHint = new Label("Speichert in: Tägliche + Währungspaar + Signalwechsel-Dateien");
         storageHint.setFont(Font.font(10));
         storageHint.getStyleClass().add("placeholder-hint-small");
         
-        placeholder.getChildren().addAll(placeholderText, placeholderHint, dataDirectoryHint, storageHint);
+        Label changeHint = new Label("🔄 Signalwechsel werden automatisch erkannt und angezeigt");
+        changeHint.setFont(Font.font(10));
+        changeHint.getStyleClass().add("placeholder-hint-small");
+        
+        placeholder.getChildren().addAll(placeholderText, placeholderHint, dataDirectoryHint, storageHint, changeHint);
         return placeholder;
     }
     
@@ -394,14 +408,14 @@ public class MainWindowController {
         bottomArea.setPadding(new Insets(5, 20, 5, 20));
         bottomArea.getStyleClass().add("status-bar");
         
-        Label appInfo = new Label("FXSSI Data Extractor v1.3");
+        Label appInfo = new Label("FXSSI Data Extractor v1.4");
         appInfo.setFont(Font.font(10));
         appInfo.getStyleClass().add("app-info");
         
         Separator separator1 = new Separator();
         separator1.setOrientation(javafx.geometry.Orientation.VERTICAL);
         
-        Label appDescription = new Label("Sentiment-Analyse für Forex-Handel");
+        Label appDescription = new Label("Sentiment-Analyse + Signalwechsel-Erkennung");
         appDescription.setFont(Font.font(10));
         appDescription.getStyleClass().add("app-description");
         
@@ -416,14 +430,14 @@ public class MainWindowController {
         Separator separator3 = new Separator();
         separator3.setOrientation(javafx.geometry.Orientation.VERTICAL);
         
-        Label storageInfo = new Label("Duale Speicherung: Täglich + Währungspaare");
+        Label storageInfo = new Label("Speicherung: Täglich + Währungspaare + Signalwechsel");
         storageInfo.setFont(Font.font(10));
         storageInfo.getStyleClass().add("storage-info");
         
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        Label dataSource = new Label("Live-Daten von FXSSI.com");
+        Label dataSource = new Label("Live-Daten + Signalwechsel von FXSSI.com");
         dataSource.setFont(Font.font(10));
         dataSource.getStyleClass().add("data-source");
         
@@ -448,7 +462,7 @@ public class MainWindowController {
             // Starte Auto-Refresh falls aktiviert
             if (autoRefreshCheckBox.isSelected()) {
                 refreshManager.startAutoRefresh(refreshIntervalSpinner.getValue());
-                LOGGER.info("Auto-Refresh gestartet mit dualer Speicherung alle " + refreshIntervalSpinner.getValue() + " Minuten");
+                LOGGER.info("Auto-Refresh gestartet mit Signalwechsel-Erkennung alle " + refreshIntervalSpinner.getValue() + " Minuten");
             }
             
             LOGGER.info("Datenservice gestartet mit Datenverzeichnis: " + dataDirectory);
@@ -463,33 +477,36 @@ public class MainWindowController {
     }
     
     /**
-     * Aktualisiert die Daten in der Tabelle mit dualer Speicherung
+     * Aktualisiert die Daten in der Tabelle mit Signalwechsel-Erkennung
      * WICHTIG: Diese Methode wird bei JEDEM Refresh (manuell + automatisch) aufgerufen
      */
     private void refreshData() {
         Platform.runLater(() -> {
-            updateStatus("Lade Daten und speichere in beide Systeme...");
+            updateStatus("Lade Daten und erkenne Signalwechsel...");
             refreshButton.setDisable(true);
         });
         
         // Lade Daten asynchron
         new Thread(() -> {
             try {
-                // WICHTIG: Diese Methode garantiert Speicherung in beide Systeme
+                // WICHTIG: Diese Methode garantiert Signalwechsel-Erkennung
                 List<CurrencyPairData> data = dataService.forceDataRefresh();
                 
                 Platform.runLater(() -> {
                     updateTableData(data);
-                    updateStatus("Daten aktualisiert (" + data.size() + " Währungspaare) - in beide Systeme gespeichert");
+                    updateStatus("Daten aktualisiert (" + data.size() + " Währungspaare) - Signalwechsel erkannt");
                     lastUpdateLabel.setText("Letzte Aktualisierung: " + 
-                        java.time.LocalTime.now().format(TIME_FORMATTER) + " (Duale Speicherung)");
+                        java.time.LocalTime.now().format(TIME_FORMATTER) + " (mit Signalwechsel-Check)");
                     refreshButton.setDisable(false);
                     
                     // Aktualisiere Speicher-Statistiken
                     updateStorageStatistics();
+                    
+                    // Aktualisiere Signalwechsel-Zellen
+                    refreshSignalChangeCells();
                 });
                 
-                LOGGER.info("GUI-Refresh abgeschlossen: " + data.size() + " Datensätze in beide Speichersysteme gespeichert");
+                LOGGER.info("GUI-Refresh abgeschlossen: " + data.size() + " Datensätze + Signalwechsel-Erkennung");
                 
             } catch (Exception e) {
                 LOGGER.log(Level.WARNING, "Fehler beim Laden der Daten: " + e.getMessage(), e);
@@ -518,7 +535,23 @@ public class MainWindowController {
             tableData.add(row);
         }
         
-        LOGGER.fine("Tabelle mit " + data.size() + " Einträgen aktualisiert");
+        LOGGER.fine("Tabelle mit " + data.size() + " Einträgen aktualisiert (inkl. Signalwechsel-Spalte)");
+    }
+    
+    /**
+     * Aktualisiert die Signalwechsel-Zellen nach einem Refresh
+     */
+    private void refreshSignalChangeCells() {
+        try {
+            // Force refresh der Signalwechsel-Spalte
+            if (changeColumn != null) {
+                Platform.runLater(() -> {
+                    currencyTable.refresh();
+                });
+            }
+        } catch (Exception e) {
+            LOGGER.fine("Fehler beim Aktualisieren der Signalwechsel-Zellen: " + e.getMessage());
+        }
     }
     
     /**
@@ -529,7 +562,7 @@ public class MainWindowController {
             GuiDataService.ExtendedDataStatistics stats = dataService.getExtendedDataStatistics();
             Set<String> availablePairs = dataService.getAvailableCurrencyPairs();
             
-            String storageText = String.format("Speicherung: %d tägl. Dateien, %d Währungspaare verfügbar", 
+            String storageText = String.format("Speicherung: %d tägl. Dateien, %d Währungspaare, Signalwechsel aktiv", 
                 stats.getTotalFiles(), availablePairs.size());
             
             Platform.runLater(() -> {
@@ -679,6 +712,35 @@ public class MainWindowController {
         @Override
         public TableCell<CurrencyPairTableRow, CurrencyPairTableRow> call(TableColumn<CurrencyPairTableRow, CurrencyPairTableRow> param) {
             return new SignalIconTableCell();
+        }
+    }
+    
+    /**
+     * Cell Factory für Signalwechsel-Anzeige
+     */
+    private class SignalChangeCellFactory implements Callback<TableColumn<CurrencyPairTableRow, CurrencyPairTableRow>, TableCell<CurrencyPairTableRow, CurrencyPairTableRow>> {
+        @Override
+        public TableCell<CurrencyPairTableRow, CurrencyPairTableRow> call(TableColumn<CurrencyPairTableRow, CurrencyPairTableRow> param) {
+            try {
+                return new SignalChangeTableCell(
+                    dataService.getSignalChangeHistoryManager(), 
+                    stage
+                );
+            } catch (Exception e) {
+                LOGGER.warning("Fehler beim Erstellen der SignalChangeTableCell: " + e.getMessage());
+                // Fallback: Leere Zelle
+                return new TableCell<CurrencyPairTableRow, CurrencyPairTableRow>() {
+                    @Override
+                    protected void updateItem(CurrencyPairTableRow item, boolean empty) {
+                        super.updateItem(item, empty);
+                        if (empty || item == null) {
+                            setText("");
+                        } else {
+                            setText("❌"); // Zeigt Fehler an
+                        }
+                    }
+                };
+            }
         }
     }
 }
