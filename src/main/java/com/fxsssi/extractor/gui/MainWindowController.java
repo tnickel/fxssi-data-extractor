@@ -1,7 +1,9 @@
 package com.fxsssi.extractor.gui;
 
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -35,9 +37,10 @@ import javafx.util.Callback;
 /**
  * Vollständige Java-GUI für das FXSSI Data Extractor Hauptfenster
  * Erstellt alle UI-Komponenten programmatisch ohne FXML mit konfigurierbarem Datenverzeichnis
+ * Jetzt mit Anzeigen für duale Speicherung (tägliche UND währungspaar-spezifische Dateien)
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.2 (mit breiterem Fenster für bessere Balken-Sichtbarkeit)
+ * @version 1.3 (mit dualer Speicherung Integration)
  */
 public class MainWindowController {
     
@@ -61,6 +64,7 @@ public class MainWindowController {
     private Label statusLabel;
     private Label lastUpdateLabel;
     private Label dataDirectoryLabel;
+    private Label storageInfoLabel;
     private Button refreshButton;
     private Spinner<Integer> refreshIntervalSpinner;
     private CheckBox autoRefreshCheckBox;
@@ -84,6 +88,7 @@ public class MainWindowController {
     public MainWindowController(String dataDirectory) {
         this.dataDirectory = validateDataDirectory(dataDirectory);
         LOGGER.info("MainWindowController erstellt mit Datenverzeichnis: " + this.dataDirectory);
+        LOGGER.info("Duale Speicherung aktiviert: Tägliche UND währungspaar-spezifische Dateien");
     }
     
     /**
@@ -94,6 +99,7 @@ public class MainWindowController {
         
         LOGGER.info("Erstelle Hauptfenster programmatisch...");
         LOGGER.info("Datenverzeichnis: " + dataDirectory);
+        LOGGER.info("Duale Speicherung: Tägliche + währungspaar-spezifische Dateien");
         
         // Initialisiere Datenstrukturen
         tableData = FXCollections.observableArrayList();
@@ -120,7 +126,7 @@ public class MainWindowController {
         // Lade CSS (falls vorhanden)
         loadStylesheets();
         
-        LOGGER.info("Hauptfenster erfolgreich erstellt (1400x800)");
+        LOGGER.info("Hauptfenster erfolgreich erstellt (1400x800) mit dualer Speicherung");
         return scene;
     }
     
@@ -152,7 +158,7 @@ public class MainWindowController {
         titleBar.setPadding(new Insets(10, 20, 10, 20));
         titleBar.getStyleClass().add("title-bar");
         
-        Label titleLabel = new Label("FXSSI Live Sentiment Monitor");
+        Label titleLabel = new Label("FXSSI Live Sentiment Monitor (Duale Speicherung)");
         titleLabel.setFont(Font.font("System", FontWeight.BOLD, 24));
         titleLabel.getStyleClass().add("title-label");
         
@@ -169,9 +175,9 @@ public class MainWindowController {
         toolbar.setPadding(new Insets(10, 20, 10, 20));
         toolbar.getStyleClass().add("toolbar");
         
-        // Refresh-Button
-        refreshButton = new Button("Refresh");
-        refreshButton.setFont(Font.font(14));
+        // Refresh-Button (mit Hinweis auf duale Speicherung)
+        refreshButton = new Button("Refresh (Speichert in beide Systeme)");
+        refreshButton.setFont(Font.font(12));
         refreshButton.getStyleClass().add("refresh-button");
         refreshButton.setOnAction(event -> refreshData());
         
@@ -192,8 +198,10 @@ public class MainWindowController {
         autoRefreshCheckBox.setOnAction(event -> {
             if (autoRefreshCheckBox.isSelected()) {
                 refreshManager.startAutoRefresh(refreshIntervalSpinner.getValue());
+                LOGGER.info("Auto-Refresh aktiviert - Speicherung in beide Systeme bei jedem Intervall");
             } else {
                 refreshManager.stopAutoRefresh();
+                LOGGER.info("Auto-Refresh deaktiviert");
             }
         });
         
@@ -209,6 +217,7 @@ public class MainWindowController {
         refreshIntervalSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
             if (autoRefreshCheckBox.isSelected()) {
                 refreshManager.updateRefreshInterval(newVal);
+                LOGGER.info("Refresh-Intervall geändert auf " + newVal + " Minuten (mit dualer Speicherung)");
             }
         });
         
@@ -228,7 +237,7 @@ public class MainWindowController {
     }
     
     /**
-     * Erstellt den Status-Bereich
+     * Erstellt den Status-Bereich mit erweiterten Informationen
      */
     private VBox createStatusArea() {
         VBox statusArea = new VBox();
@@ -247,7 +256,12 @@ public class MainWindowController {
         dataDirectoryLabel.setFont(Font.font(9));
         dataDirectoryLabel.getStyleClass().add("data-directory-label");
         
-        statusArea.getChildren().addAll(statusLabel, lastUpdateLabel, dataDirectoryLabel);
+        // NEUE: Speicher-Info-Label
+        storageInfoLabel = new Label("Speicherung: Tägliche + Währungspaar-Dateien");
+        storageInfoLabel.setFont(Font.font(9));
+        storageInfoLabel.getStyleClass().add("storage-info-label");
+        
+        statusArea.getChildren().addAll(statusLabel, lastUpdateLabel, dataDirectoryLabel, storageInfoLabel);
         return statusArea;
     }
     
@@ -283,7 +297,7 @@ public class MainWindowController {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        Label sectionDescription = new Label("Buy/Sell Ratios and Trading Signals");
+        Label sectionDescription = new Label("Buy/Sell Ratios mit dualer Speicherung");
         sectionDescription.setFont(Font.font(12));
         sectionDescription.getStyleClass().add("section-description");
         
@@ -345,7 +359,7 @@ public class MainWindowController {
     }
     
     /**
-     * Erstellt den Placeholder für leere Tabelle
+     * Erstellt den Placeholder für leere Tabelle mit dualer Speicherung Info
      */
     private VBox createTablePlaceholder() {
         VBox placeholder = new VBox(10);
@@ -363,12 +377,16 @@ public class MainWindowController {
         dataDirectoryHint.setFont(Font.font(10));
         dataDirectoryHint.getStyleClass().add("placeholder-hint-small");
         
-        placeholder.getChildren().addAll(placeholderText, placeholderHint, dataDirectoryHint);
+        Label storageHint = new Label("Speichert in tägliche UND währungspaar-spezifische Dateien");
+        storageHint.setFont(Font.font(10));
+        storageHint.getStyleClass().add("placeholder-hint-small");
+        
+        placeholder.getChildren().addAll(placeholderText, placeholderHint, dataDirectoryHint, storageHint);
         return placeholder;
     }
     
     /**
-     * Erstellt den unteren Bereich (Status-Leiste)
+     * Erstellt den unteren Bereich (Status-Leiste) mit erweiterten Informationen
      */
     private HBox createBottomArea() {
         HBox bottomArea = new HBox(20);
@@ -376,7 +394,7 @@ public class MainWindowController {
         bottomArea.setPadding(new Insets(5, 20, 5, 20));
         bottomArea.getStyleClass().add("status-bar");
         
-        Label appInfo = new Label("FXSSI Data Extractor v1.2");
+        Label appInfo = new Label("FXSSI Data Extractor v1.3");
         appInfo.setFont(Font.font(10));
         appInfo.getStyleClass().add("app-info");
         
@@ -395,6 +413,13 @@ public class MainWindowController {
         dataDirectoryInfo.setFont(Font.font(10));
         dataDirectoryInfo.getStyleClass().add("data-directory-info");
         
+        Separator separator3 = new Separator();
+        separator3.setOrientation(javafx.geometry.Orientation.VERTICAL);
+        
+        Label storageInfo = new Label("Duale Speicherung: Täglich + Währungspaare");
+        storageInfo.setFont(Font.font(10));
+        storageInfo.getStyleClass().add("storage-info");
+        
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
@@ -403,7 +428,8 @@ public class MainWindowController {
         dataSource.getStyleClass().add("data-source");
         
         bottomArea.getChildren().addAll(
-            appInfo, separator1, appDescription, separator2, dataDirectoryInfo, spacer, dataSource
+            appInfo, separator1, appDescription, separator2, dataDirectoryInfo, 
+            separator3, storageInfo, spacer, dataSource
         );
         
         return bottomArea;
@@ -422,9 +448,14 @@ public class MainWindowController {
             // Starte Auto-Refresh falls aktiviert
             if (autoRefreshCheckBox.isSelected()) {
                 refreshManager.startAutoRefresh(refreshIntervalSpinner.getValue());
+                LOGGER.info("Auto-Refresh gestartet mit dualer Speicherung alle " + refreshIntervalSpinner.getValue() + " Minuten");
             }
             
             LOGGER.info("Datenservice gestartet mit Datenverzeichnis: " + dataDirectory);
+            
+            // Zeige initiale Statistiken
+            updateStorageStatistics();
+            
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Fehler beim Starten des Datenservice: " + e.getMessage(), e);
             updateStatus("Fehler beim Starten des Datenservice: " + e.getMessage());
@@ -432,26 +463,33 @@ public class MainWindowController {
     }
     
     /**
-     * Aktualisiert die Daten in der Tabelle
+     * Aktualisiert die Daten in der Tabelle mit dualer Speicherung
+     * WICHTIG: Diese Methode wird bei JEDEM Refresh (manuell + automatisch) aufgerufen
      */
     private void refreshData() {
         Platform.runLater(() -> {
-            updateStatus("Lade Daten...");
+            updateStatus("Lade Daten und speichere in beide Systeme...");
             refreshButton.setDisable(true);
         });
         
         // Lade Daten asynchron
         new Thread(() -> {
             try {
-                List<CurrencyPairData> data = dataService.getCurrentData();
+                // WICHTIG: Diese Methode garantiert Speicherung in beide Systeme
+                List<CurrencyPairData> data = dataService.forceDataRefresh();
                 
                 Platform.runLater(() -> {
                     updateTableData(data);
-                    updateStatus("Daten aktualisiert (" + data.size() + " Währungspaare)");
+                    updateStatus("Daten aktualisiert (" + data.size() + " Währungspaare) - in beide Systeme gespeichert");
                     lastUpdateLabel.setText("Letzte Aktualisierung: " + 
-                        java.time.LocalTime.now().format(TIME_FORMATTER));
+                        java.time.LocalTime.now().format(TIME_FORMATTER) + " (Duale Speicherung)");
                     refreshButton.setDisable(false);
+                    
+                    // Aktualisiere Speicher-Statistiken
+                    updateStorageStatistics();
                 });
+                
+                LOGGER.info("GUI-Refresh abgeschlossen: " + data.size() + " Datensätze in beide Speichersysteme gespeichert");
                 
             } catch (Exception e) {
                 LOGGER.log(Level.WARNING, "Fehler beim Laden der Daten: " + e.getMessage(), e);
@@ -484,6 +522,28 @@ public class MainWindowController {
     }
     
     /**
+     * Aktualisiert die Speicher-Statistiken in der GUI
+     */
+    private void updateStorageStatistics() {
+        try {
+            GuiDataService.ExtendedDataStatistics stats = dataService.getExtendedDataStatistics();
+            Set<String> availablePairs = dataService.getAvailableCurrencyPairs();
+            
+            String storageText = String.format("Speicherung: %d tägl. Dateien, %d Währungspaare verfügbar", 
+                stats.getTotalFiles(), availablePairs.size());
+            
+            Platform.runLater(() -> {
+                storageInfoLabel.setText(storageText);
+            });
+            
+            LOGGER.fine("Speicher-Statistiken aktualisiert: " + stats.toString());
+            
+        } catch (Exception e) {
+            LOGGER.fine("Konnte Speicher-Statistiken nicht aktualisieren: " + e.getMessage());
+        }
+    }
+    
+    /**
      * Aktualisiert den Status-Text
      */
     private void updateStatus(String status) {
@@ -511,6 +571,33 @@ public class MainWindowController {
      */
     public String getDataDirectory() {
         return dataDirectory;
+    }
+    
+    /**
+     * Gibt verfügbare Währungspaare zurück (für erweiterte GUI-Features)
+     */
+    public Set<String> getAvailableCurrencyPairs() {
+        try {
+            return dataService.getAvailableCurrencyPairs();
+        } catch (Exception e) {
+            LOGGER.warning("Konnte verfügbare Währungspaare nicht abrufen: " + e.getMessage());
+            return java.util.Collections.emptySet();
+        }
+    }
+    
+    /**
+     * Holt historische Daten für ein Währungspaar (für erweiterte Features)
+     * @param currencyPair Das Währungspaar
+     * @param count Anzahl der gewünschten Einträge
+     * @return Liste der historischen Daten
+     */
+    public List<CurrencyPairData> getHistoricalDataForPair(String currencyPair, int count) {
+        try {
+            return dataService.getRecentDataForCurrencyPair(currencyPair, count);
+        } catch (Exception e) {
+            LOGGER.warning("Konnte historische Daten für " + currencyPair + " nicht abrufen: " + e.getMessage());
+            return new ArrayList<>();
+        }
     }
     
     /**

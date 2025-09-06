@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -11,13 +12,15 @@ import java.util.logging.Logger;
 import com.fxssi.extractor.model.CurrencyPairData;
 import com.fxssi.extractor.scraper.FXSSIScraper;
 import com.fxssi.extractor.storage.DataFileManager;
+import com.fxsssi.extractor.storage.CurrencyPairDataManager;
 
 /**
  * Service-Klasse für die Bereitstellung von FXSSI-Daten für die GUI
  * Integriert die bestehenden Scraper- und Storage-Komponenten mit konfigurierbarem Datenverzeichnis
+ * Jetzt mit dualer Speicherung: tägliche UND währungspaar-spezifische Dateien
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.1 (mit konfigurierbarem Datenverzeichnis)
+ * @version 1.2 (mit CurrencyPairDataManager Integration)
  */
 public class GuiDataService {
     
@@ -27,10 +30,11 @@ public class GuiDataService {
     
     private FXSSIScraper scraper;
     private DataFileManager fileManager;
+    private CurrencyPairDataManager currencyPairManager;
     private List<CurrencyPairData> cachedData;
     private LocalDateTime lastCacheUpdate;
     private boolean isInitialized = false;
-    private String dataDirectory="";
+    private String dataDirectory;
     
     /**
      * Konstruktor mit Standard-Datenverzeichnis
@@ -47,6 +51,7 @@ public class GuiDataService {
         this.dataDirectory = validateAndNormalizeDataDirectory(dataDirectory);
         this.cachedData = new ArrayList<>();
         LOGGER.info("GuiDataService erstellt mit Datenverzeichnis: " + this.dataDirectory);
+        LOGGER.info("Duale Speicherung aktiviert: Tägliche UND währungspaar-spezifische Dateien");
     }
     
     /**
@@ -60,9 +65,11 @@ public class GuiDataService {
             // Initialisiere Komponenten mit konfiguriertem Datenverzeichnis
             scraper = new FXSSIScraper(dataDirectory);
             fileManager = new DataFileManager(dataDirectory);
+            currencyPairManager = new CurrencyPairDataManager(dataDirectory);
             
-            // Erstelle Datenverzeichnis
+            // Erstelle Datenverzeichnisse
             fileManager.createDataDirectory();
+            currencyPairManager.createCurrencyDataDirectory();
             
             // Teste Verbindung
             boolean connectionOk = scraper.testConnection();
@@ -71,7 +78,10 @@ public class GuiDataService {
             }
             
             isInitialized = true;
-            LOGGER.info("GuiDataService erfolgreich initialisiert");
+            LOGGER.info("GuiDataService erfolgreich initialisiert mit dualer Speicherung");
+            
+            // Logge initiale Statistiken
+            logInitialStatistics();
             
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Fehler beim Initialisieren des GuiDataService: " + e.getMessage(), e);
@@ -81,6 +91,7 @@ public class GuiDataService {
     
     /**
      * Holt aktuelle Daten (mit Caching für Performance)
+     * WICHTIG: Speichert bei jedem Refresh in BEIDE Speichersysteme
      */
     public List<CurrencyPairData> getCurrentData() throws Exception {
         if (!isInitialized) {
@@ -93,20 +104,20 @@ public class GuiDataService {
             return new ArrayList<>(cachedData);
         }
         
-        LOGGER.info("Lade frische Daten...");
+        LOGGER.info("Lade frische Daten für GUI-Refresh...");
         
         try {
             // Versuche neue Daten zu laden
             List<CurrencyPairData> freshData = scraper.extractCurrentRatioData();
             
             if (freshData != null && !freshData.isEmpty()) {
-                // Speichere Daten
-                fileManager.appendDataToFile(freshData);
+                // SPEICHERE IN BEIDE SYSTEME bei jedem Refresh
+                saveToBothStorageSystems(freshData);
                 
                 // Aktualisiere Cache
                 updateCache(freshData);
                 
-                LOGGER.info("Erfolgreich " + freshData.size() + " aktuelle Datensätze geladen");
+                LOGGER.info("GUI-Refresh: " + freshData.size() + " Datensätze geladen und in beide Speichersysteme gespeichert");
                 return new ArrayList<>(freshData);
             } else {
                 // Fallback: Verwende gespeicherte Daten
@@ -123,6 +134,7 @@ public class GuiDataService {
     
     /**
      * Lädt Daten asynchron für bessere GUI-Performance
+     * WICHTIG: Speichert auch bei asynchronen Loads in beide Systeme
      */
     public CompletableFuture<List<CurrencyPairData>> getCurrentDataAsync() {
         return CompletableFuture.supplyAsync(() -> {
@@ -136,7 +148,64 @@ public class GuiDataService {
     }
     
     /**
-     * Holt historische Daten für einen bestimmten Zeitraum
+     * Führt eine manuelle Datenaktualisierung durch (für Refresh-Button)
+     * GARANTIERT Speicherung in beide Systeme
+     */
+    public List<CurrencyPairData> forceDataRefresh() throws Exception {
+        LOGGER.info("Erzwinge manuelle Datenaktualisierung...");
+        
+        // Invalidiere Cache
+        invalidateCache();
+        
+        // Lade neue Daten
+        List<CurrencyPairData> freshData = scraper.extractCurrentRatioData();
+        
+        if (freshData != null && !freshData.isEmpty()) {
+            // GARANTIERTE Speicherung in beide Systeme
+            saveToBothStorageSystems(freshData);
+            
+            // Aktualisiere Cache
+            updateCache(freshData);
+            
+            LOGGER.info("Manuelle Aktualisierung: " + freshData.size() + " Datensätze in beide Speichersysteme gespeichert");
+            return freshData;
+        } else {
+            LOGGER.warning("Manuelle Aktualisierung: Keine neuen Daten erhalten");
+            return loadFallbackData();
+        }
+    }
+    
+    /**
+     * ZENTRALE METHODE: Speichert Daten in beide Speichersysteme
+     * @param data Die zu speichernden Daten
+     */
+    private void saveToBothStorageSystems(List<CurrencyPairData> data) {
+        if (data == null || data.isEmpty()) {
+            LOGGER.warning("Keine Daten zum Speichern in beiden Systemen");
+            return;
+        }
+        
+        try {
+            LOGGER.fine("Speichere " + data.size() + " Datensätze in beide Speichersysteme...");
+            
+            // 1. SPEICHERE in tägliche Dateien
+            fileManager.appendDataToFile(data);
+            LOGGER.fine("✓ Daten in tägliche Datei gespeichert");
+            
+            // 2. SPEICHERE in währungspaar-spezifische Dateien
+            currencyPairManager.appendDataForAllPairs(data);
+            LOGGER.fine("✓ Daten in währungspaar-spezifische Dateien gespeichert");
+            
+            LOGGER.info("Erfolgreich " + data.size() + " Datensätze in BEIDE Speichersysteme gespeichert");
+            
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "Fehler beim Speichern in beide Systeme: " + e.getMessage(), e);
+            // Werfe Exception nicht weiter, da GUI weiter funktionieren soll
+        }
+    }
+    
+    /**
+     * Holt historische Daten für einen bestimmten Zeitraum aus täglichen Dateien
      */
     public List<CurrencyPairData> getHistoricalData(int daysBack) {
         if (!isInitialized) {
@@ -146,7 +215,7 @@ public class GuiDataService {
         List<CurrencyPairData> historicalData = new ArrayList<>();
         
         try {
-            LOGGER.info("Lade historische Daten für " + daysBack + " Tage...");
+            LOGGER.info("Lade historische Daten für " + daysBack + " Tage aus täglichen Dateien...");
             
             // Lade Daten für die letzten X Tage
             for (int i = 0; i < daysBack; i++) {
@@ -162,6 +231,58 @@ public class GuiDataService {
         }
         
         return historicalData;
+    }
+    
+    /**
+     * Holt historische Daten für ein spezifisches Währungspaar
+     * @param currencyPair Das Währungspaar (z.B. "EUR/USD")
+     * @return Alle historischen Daten für dieses Währungspaar
+     */
+    public List<CurrencyPairData> getHistoricalDataForCurrencyPair(String currencyPair) {
+        if (!isInitialized) {
+            throw new IllegalStateException("GuiDataService ist nicht initialisiert");
+        }
+        
+        try {
+            LOGGER.info("Lade historische Daten für Währungspaar: " + currencyPair);
+            List<CurrencyPairData> data = currencyPairManager.readDataForCurrencyPair(currencyPair);
+            LOGGER.info("Gefunden: " + data.size() + " historische Einträge für " + currencyPair);
+            return data;
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Fehler beim Laden historischer Daten für " + currencyPair + ": " + e.getMessage(), e);
+            return new ArrayList<>();
+        }
+    }
+    
+    /**
+     * Holt die letzten N Einträge für ein Währungspaar
+     * @param currencyPair Das Währungspaar
+     * @param count Anzahl der gewünschten Einträge
+     * @return Liste der letzten Einträge
+     */
+    public List<CurrencyPairData> getRecentDataForCurrencyPair(String currencyPair, int count) {
+        if (!isInitialized) {
+            throw new IllegalStateException("GuiDataService ist nicht initialisiert");
+        }
+        
+        try {
+            return currencyPairManager.readLastEntriesForCurrencyPair(currencyPair, count);
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Fehler beim Laden der letzten Daten für " + currencyPair + ": " + e.getMessage(), e);
+            return new ArrayList<>();
+        }
+    }
+    
+    /**
+     * Listet alle verfügbaren Währungspaare auf
+     * @return Set aller verfügbaren Währungspaare
+     */
+    public Set<String> getAvailableCurrencyPairs() {
+        if (!isInitialized) {
+            throw new IllegalStateException("GuiDataService ist nicht initialisiert");
+        }
+        
+        return currencyPairManager.listAvailableCurrencyPairs();
     }
     
     /**
@@ -197,29 +318,44 @@ public class GuiDataService {
     }
     
     /**
-     * Gibt Statistiken über gespeicherte Daten zurück
+     * Gibt erweiterte Statistiken über beide Speichersysteme zurück
      */
-    public DataStatistics getDataStatistics() {
+    public ExtendedDataStatistics getExtendedDataStatistics() {
         if (!isInitialized) {
-            return new DataStatistics(0, 0, "Service nicht initialisiert");
+            return new ExtendedDataStatistics(0, 0, "Service nicht initialisiert", "", 0);
         }
         
         try {
-            String stats = fileManager.getDataStatistics();
+            // Tägliche Dateien
+            String dailyStats = fileManager.getDataStatistics();
             List<String> files = fileManager.listDataFiles();
             List<CurrencyPairData> todayData = fileManager.readTodayData();
             
-            String detailedStats = String.format("%s, Datenverzeichnis: %s", stats, dataDirectory);
-            return new DataStatistics(files.size(), todayData.size(), detailedStats);
+            // Währungspaar-spezifische Dateien
+            String currencyPairStats = currencyPairManager.getOverallStatistics();
+            Set<String> availablePairs = currencyPairManager.listAvailableCurrencyPairs();
+            
+            String detailedStats = String.format(
+                "Tägliche Dateien: %s | Währungspaare: %d verfügbar | Datenverzeichnis: %s",
+                dailyStats, availablePairs.size(), dataDirectory
+            );
+            
+            return new ExtendedDataStatistics(
+                files.size(), 
+                todayData.size(), 
+                detailedStats, 
+                currencyPairStats,
+                availablePairs.size()
+            );
             
         } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Fehler beim Abrufen der Statistiken: " + e.getMessage(), e);
-            return new DataStatistics(0, 0, "Fehler beim Abrufen der Statistiken");
+            LOGGER.log(Level.WARNING, "Fehler beim Abrufen der erweiterten Statistiken: " + e.getMessage(), e);
+            return new ExtendedDataStatistics(0, 0, "Fehler beim Abrufen der Statistiken", "", 0);
         }
     }
     
     /**
-     * Bereinigt alte Datendateien
+     * Bereinigt alte Daten in beiden Speichersystemen
      */
     public void cleanupOldData(int daysToKeep) {
         if (!isInitialized) {
@@ -227,11 +363,56 @@ public class GuiDataService {
         }
         
         try {
-            LOGGER.info("Bereinige Daten älter als " + daysToKeep + " Tage...");
+            LOGGER.info("Bereinige Daten älter als " + daysToKeep + " Tage in beiden Systemen...");
+            
+            // Bereinige tägliche Dateien
             fileManager.cleanupOldFiles(daysToKeep);
+            
+            // Bereinige währungspaar-spezifische Dateien
+            currencyPairManager.cleanupOldData(daysToKeep);
+            
+            LOGGER.info("Bereinigung in beiden Speichersystemen abgeschlossen");
+            
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Fehler bei der Datenbereinigung: " + e.getMessage(), e);
         }
+    }
+    
+    /**
+     * Validiert beide Speichersysteme
+     * @return Validierungsbericht
+     */
+    public String validateBothStorageSystems() {
+        if (!isInitialized) {
+            return "Service nicht initialisiert";
+        }
+        
+        StringBuilder report = new StringBuilder();
+        
+        try {
+            report.append("=== GUI DATENVALIDIERUNG ===\n\n");
+            
+            // Validiere tägliche Dateien
+            report.append("TÄGLICHE DATEIEN:\n");
+            List<String> files = fileManager.listDataFiles();
+            int validFiles = 0;
+            
+            for (String filename : files) {
+                boolean isValid = fileManager.validateDataFile(filename);
+                if (isValid) validFiles++;
+            }
+            
+            report.append(String.format("Gefunden: %d Dateien, %d gültig\n\n", files.size(), validFiles));
+            
+            // Validiere währungspaar-spezifische Dateien
+            report.append("WÄHRUNGSPAAR-DATEIEN:\n");
+            report.append(currencyPairManager.validateAllData());
+            
+        } catch (Exception e) {
+            report.append("Fehler bei der Validierung: ").append(e.getMessage());
+        }
+        
+        return report.toString();
     }
     
     /**
@@ -254,6 +435,8 @@ public class GuiDataService {
             LOGGER.log(Level.WARNING, "Fehler beim Herunterfahren des GuiDataService: " + e.getMessage(), e);
         }
     }
+    
+    // ===== PRIVATE HILFSMETHODEN =====
     
     /**
      * Validiert und normalisiert das Datenverzeichnis
@@ -333,6 +516,19 @@ public class GuiDataService {
     }
     
     /**
+     * Loggt initiale Statistiken
+     */
+    private void logInitialStatistics() {
+        try {
+            ExtendedDataStatistics stats = getExtendedDataStatistics();
+            LOGGER.info("Initiale Statistiken: " + stats.getDetails());
+            LOGGER.info("Verfügbare Währungspaare: " + stats.getAvailableCurrencyPairs());
+        } catch (Exception e) {
+            LOGGER.fine("Konnte initiale Statistiken nicht laden: " + e.getMessage());
+        }
+    }
+    
+    /**
      * Erstellt Demo-Daten für Testing/Fallback
      */
     private List<CurrencyPairData> createDemoData() {
@@ -350,28 +546,37 @@ public class GuiDataService {
         return demoData;
     }
     
+    // ===== INNERE KLASSEN =====
+    
     /**
-     * Datenstatistik-Klasse
+     * Erweiterte Datenstatistik-Klasse mit Informationen über beide Speichersysteme
      */
-    public static class DataStatistics {
+    public static class ExtendedDataStatistics {
         private final int totalFiles;
         private final int todayRecords;
         private final String details;
+        private final String currencyPairDetails;
+        private final int availableCurrencyPairs;
         
-        public DataStatistics(int totalFiles, int todayRecords, String details) {
+        public ExtendedDataStatistics(int totalFiles, int todayRecords, String details, 
+                                    String currencyPairDetails, int availableCurrencyPairs) {
             this.totalFiles = totalFiles;
             this.todayRecords = todayRecords;
             this.details = details;
+            this.currencyPairDetails = currencyPairDetails;
+            this.availableCurrencyPairs = availableCurrencyPairs;
         }
         
         public int getTotalFiles() { return totalFiles; }
         public int getTodayRecords() { return todayRecords; }
         public String getDetails() { return details; }
+        public String getCurrencyPairDetails() { return currencyPairDetails; }
+        public int getAvailableCurrencyPairs() { return availableCurrencyPairs; }
         
         @Override
         public String toString() {
-            return String.format("Dateien: %d, Heutige Datensätze: %d, Details: %s", 
-                totalFiles, todayRecords, details);
+            return String.format("Dateien: %d, Heutige Datensätze: %d, Währungspaare: %d, Details: %s", 
+                totalFiles, todayRecords, availableCurrencyPairs, details);
         }
     }
 }

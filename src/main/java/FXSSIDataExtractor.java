@@ -7,13 +7,15 @@ import com.fxssi.extractor.scheduler.HourlyScheduler;
 import com.fxssi.extractor.scraper.FXSSIScraper;
 import com.fxssi.extractor.storage.DataFileManager;
 import com.fxsssi.extractor.gui.FXSSIGuiApplication;
+import com.fxsssi.extractor.storage.CurrencyPairDataManager;
 
 /**
  * Erweiterte Hauptklasse für das FXSSI Datenextraktions-Programm
  * Unterstützt sowohl Console-Modus als auch GUI-Modus mit konfigurierbarem Root-Pfad
+ * Jetzt mit währungspaar-spezifischer Datenspeicherung
  * 
  * @author Generated for FXSSI Data Extraction
- * @version 2.1 (mit konfigurierbarem Root-Pfad)
+ * @version 2.2 (mit CurrencyPairDataManager Integration)
  */
 public class FXSSIDataExtractor {
     
@@ -28,6 +30,7 @@ public class FXSSIDataExtractor {
     
     private FXSSIScraper scraper;
     private DataFileManager fileManager;
+    private CurrencyPairDataManager currencyPairManager;
     private HourlyScheduler scheduler;
     private boolean isGuiMode = false;
     private String dataDirectory;
@@ -58,16 +61,19 @@ public class FXSSIDataExtractor {
         
         if (!guiMode) {
             // Nur für Console-Modus initialisieren
-            this.scraper = new FXSSIScraper();
+            this.scraper = new FXSSIScraper(this.dataDirectory);
             this.fileManager = new DataFileManager(this.dataDirectory);
+            this.currencyPairManager = new CurrencyPairDataManager(this.dataDirectory);
             this.scheduler = new HourlyScheduler(this::extractAndSaveData);
             
-            // Erstelle das data Verzeichnis falls es nicht existiert
+            // Erstelle Verzeichnisse falls sie nicht existieren
             fileManager.createDataDirectory();
+            currencyPairManager.createCurrencyDataDirectory();
         }
         
         LOGGER.info("FXSSIDataExtractor initialisiert - Modus: " + (guiMode ? "GUI" : "Console") + 
                    ", Datenverzeichnis: " + this.dataDirectory);
+        LOGGER.info("Erweiterte Speicherung: Tägliche Dateien UND währungspaar-spezifische Dateien");
     }
     
     /**
@@ -81,6 +87,7 @@ public class FXSSIDataExtractor {
         
         LOGGER.info("FXSSI Data Extractor gestartet (Console-Modus) - Beginne mit stündlicher Datenextraktion");
         LOGGER.info("Datenverzeichnis: " + dataDirectory);
+        LOGGER.info("Speichert in: tägliche CSV-Dateien UND währungspaar-spezifische Dateien");
         
         // Führe eine initiale Extraktion durch
         extractAndSaveData();
@@ -88,7 +95,7 @@ public class FXSSIDataExtractor {
         // Starte den stündlichen Scheduler
         scheduler.startScheduling();
         
-        LOGGER.info("Stündlicher Scheduler aktiv - Daten werden alle 60 Minuten aktualisiert");
+        LOGGER.info("Stündlicher Scheduler aktiv - Daten werden alle 60 Minuten in beide Formate gespeichert");
     }
     
     /**
@@ -113,8 +120,15 @@ public class FXSSIDataExtractor {
     }
     
     /**
-     * Führt die Datenextraktion durch und speichert die Ergebnisse
-     * Diese Methode wird stündlich vom Scheduler aufgerufen
+     * Gibt den CurrencyPairDataManager zurück (für externe Zugriffe)
+     */
+    public CurrencyPairDataManager getCurrencyPairManager() {
+        return currencyPairManager;
+    }
+    
+    /**
+     * Führt die Datenextraktion durch und speichert die Ergebnisse in BEIDEN Formaten
+     * Diese Methode wird stündlich vom Scheduler aufgerufen UND bei jedem GUI-Refresh
      */
     private void extractAndSaveData() {
         try {
@@ -123,11 +137,21 @@ public class FXSSIDataExtractor {
             List<CurrencyPairData> currentData = scraper.extractCurrentRatioData();
             
             if (currentData != null && !currentData.isEmpty()) {
+                // BESTEHENDE SPEICHERUNG: Tägliche CSV-Dateien
                 fileManager.appendDataToFile(currentData);
+                
+                // NEUE SPEICHERUNG: Währungspaar-spezifische Dateien
+                currencyPairManager.appendDataForAllPairs(currentData);
+                
                 LOGGER.info("Erfolgreich " + currentData.size() + " Währungspaare extrahiert und gespeichert");
+                LOGGER.info("Daten gespeichert in: tägliche Datei UND " + currentData.size() + " währungspaar-spezifische Dateien");
                 
                 // Logge eine Zusammenfassung der extrahierten Daten
                 logDataSummary(currentData);
+                
+                // Logge Speicher-Statistiken
+                logStorageStatistics();
+                
             } else {
                 LOGGER.warning("Keine Daten von FXSSI erhalten - möglicherweise Website-Problem");
             }
@@ -138,13 +162,133 @@ public class FXSSIDataExtractor {
     }
     
     /**
+     * Führt eine manuelle Datenextraktion durch (für GUI-Refresh)
+     * Öffentliche Methode die von der GUI aufgerufen werden kann
+     */
+    public void executeManualDataExtraction() {
+        LOGGER.info("Manuelle Datenextraktion ausgelöst...");
+        extractAndSaveData();
+    }
+    
+    /**
      * Loggt eine Zusammenfassung der extrahierten Daten
      */
     private void logDataSummary(List<CurrencyPairData> data) {
-        for (CurrencyPairData pair : data) {
-            LOGGER.info(String.format("Extrahiert: %s - Buy: %.1f%%, Sell: %.1f%%, Signal: %s", 
-                pair.getCurrencyPair(), pair.getBuyPercentage(), pair.getSellPercentage(), pair.getTradingSignal()));
+        if (LOGGER.isLoggable(Level.INFO)) {
+            for (CurrencyPairData pair : data) {
+                LOGGER.info(String.format("Extrahiert: %s - Buy: %.1f%%, Sell: %.1f%%, Signal: %s", 
+                    pair.getCurrencyPair(), pair.getBuyPercentage(), pair.getSellPercentage(), pair.getTradingSignal()));
+            }
         }
+    }
+    
+    /**
+     * Loggt Speicher-Statistiken für beide Speichersysteme
+     */
+    private void logStorageStatistics() {
+        try {
+            // Statistiken für tägliche Dateien
+            String dailyStats = fileManager.getDataStatistics();
+            LOGGER.info("Tägliche Dateien: " + dailyStats);
+            
+            // Statistiken für währungspaar-spezifische Dateien
+            String currencyPairStats = currencyPairManager.getOverallStatistics();
+            LOGGER.fine("Währungspaar-spezifische Dateien:\n" + currencyPairStats);
+            
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Fehler beim Abrufen der Speicher-Statistiken: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Bereinigt alte Daten in beiden Speichersystemen
+     * @param daysToKeep Anzahl Tage die behalten werden sollen
+     */
+    public void cleanupOldDataInBothSystems(int daysToKeep) {
+        LOGGER.info("Beginne Bereinigung alter Daten in beiden Speichersystemen (" + daysToKeep + " Tage behalten)...");
+        
+        try {
+            // Bereinige tägliche Dateien
+            fileManager.cleanupOldFiles(daysToKeep);
+            
+            // Bereinige währungspaar-spezifische Dateien
+            currencyPairManager.cleanupOldData(daysToKeep);
+            
+            LOGGER.info("Bereinigung in beiden Speichersystemen abgeschlossen");
+            
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Fehler bei der Bereinigung: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Validiert Daten in beiden Speichersystemen
+     * @return Validierungsbericht
+     */
+    public String validateBothStorageSystems() {
+        StringBuilder report = new StringBuilder();
+        
+        report.append("=== VOLLSTÄNDIGE DATENVALIDIERUNG ===\n\n");
+        
+        try {
+            // Validiere tägliche Dateien
+            report.append("TÄGLICHE DATEIEN:\n");
+            report.append("================\n");
+            List<String> dailyFiles = fileManager.listDataFiles();
+            int validDailyFiles = 0;
+            
+            for (String filename : dailyFiles) {
+                boolean isValid = fileManager.validateDataFile(filename);
+                report.append(String.format("%-30s: %s\n", filename, isValid ? "✓ Gültig" : "✗ Ungültig"));
+                if (isValid) validDailyFiles++;
+            }
+            
+            report.append(String.format("\nTägliche Dateien: %d/%d gültig\n\n", validDailyFiles, dailyFiles.size()));
+            
+            // Validiere währungspaar-spezifische Dateien
+            report.append("WÄHRUNGSPAAR-SPEZIFISCHE DATEIEN:\n");
+            report.append("=================================\n");
+            String currencyValidation = currencyPairManager.validateAllData();
+            report.append(currencyValidation);
+            
+        } catch (Exception e) {
+            report.append("Fehler bei der Validierung: ").append(e.getMessage()).append("\n");
+        }
+        
+        return report.toString();
+    }
+    
+    /**
+     * Gibt detaillierte Statistiken für beide Speichersysteme zurück
+     */
+    public String getDetailedStorageStatistics() {
+        StringBuilder stats = new StringBuilder();
+        
+        stats.append("=== DETAILLIERTE SPEICHER-STATISTIKEN ===\n\n");
+        
+        try {
+            // Tägliche Dateien
+            stats.append("TÄGLICHE SPEICHERUNG:\n");
+            stats.append("====================\n");
+            stats.append(fileManager.getDataStatistics()).append("\n\n");
+            
+            // Währungspaar-spezifische Dateien
+            stats.append("WÄHRUNGSPAAR-SPEZIFISCHE SPEICHERUNG:\n");
+            stats.append("====================================\n");
+            stats.append(currencyPairManager.getOverallStatistics()).append("\n\n");
+            
+            // Datenverzeichnis-Info
+            stats.append("KONFIGURATION:\n");
+            stats.append("==============\n");
+            stats.append("Hauptverzeichnis: ").append(dataDirectory).append("\n");
+            stats.append("Tägliche Dateien: ").append(dataDirectory).append("/\n");
+            stats.append("Währungspaar-Dateien: ").append(dataDirectory).append("/currency_pairs/\n");
+            
+        } catch (Exception e) {
+            stats.append("Fehler beim Abrufen der Statistiken: ").append(e.getMessage()).append("\n");
+        }
+        
+        return stats.toString();
     }
     
     /**
@@ -177,7 +321,7 @@ public class FXSSIDataExtractor {
      * Zeigt die Hilfe-Informationen an
      */
     private static void showHelp() {
-        System.out.println("FXSSI Data Extractor v2.1");
+        System.out.println("FXSSI Data Extractor v2.2");
         System.out.println("=========================");
         System.out.println();
         System.out.println("Verwendung:");
@@ -195,6 +339,11 @@ public class FXSSIDataExtractor {
         System.out.println("  java FXSSIDataExtractor " + DATA_DIR_ARG + " C:\\FXSSIData " + GUI_ARG);
         System.out.println("  java FXSSIDataExtractor " + DATA_DIR_ARG + " ./custom-data");
         System.out.println();
+        System.out.println("Datenstruktur:");
+        System.out.println("- Tägliche Dateien: <datenverzeichnis>/fxssi_data_YYYY-MM-DD.csv");
+        System.out.println("- Währungspaar-Dateien: <datenverzeichnis>/currency_pairs/EUR_USD.csv");
+        System.out.println("- Beide Formate werden parallel gepflegt");
+        System.out.println();
         System.out.println("Datenverzeichnis-Hinweise:");
         System.out.println("- Relative Pfade sind erlaubt (z.B. ./data, ../shared-data)");
         System.out.println("- Absolute Pfade sind erlaubt (z.B. /var/data, C:\\Data)");
@@ -205,10 +354,11 @@ public class FXSSIDataExtractor {
         System.out.println("- Grafische Anzeige der Live-Sentiment-Daten");
         System.out.println("- Konfigurierbare Auto-Refresh-Intervalle");
         System.out.println("- Interaktive Tabelle mit Ratio-Balken und Signal-Icons");
+        System.out.println("- Daten werden bei jedem Refresh in beide Formate gespeichert");
         System.out.println();
         System.out.println("Im Console-Modus:");
         System.out.println("- Automatische stündliche Datenextraktion");
-        System.out.println("- CSV-Speicherung im konfigurierten Verzeichnis");
+        System.out.println("- Duale CSV-Speicherung im konfigurierten Verzeichnis");
         System.out.println("- Läuft als Hintergrund-Service");
     }
     
@@ -271,12 +421,14 @@ public class FXSSIDataExtractor {
                 case GUI:
                     LOGGER.info("Starte FXSSI Data Extractor im GUI-Modus...");
                     LOGGER.info("Datenverzeichnis: " + config.dataDirectory);
+                    LOGGER.info("Duale Speicherung: Tägliche UND währungspaar-spezifische Dateien");
                     FXSSIGuiApplication.launchGui(args, config.dataDirectory);
                     break;
                     
                 case CONSOLE:
                     LOGGER.info("Starte FXSSI Data Extractor im Console-Modus...");
                     LOGGER.info("Datenverzeichnis: " + config.dataDirectory);
+                    LOGGER.info("Duale Speicherung: Tägliche UND währungspaar-spezifische Dateien");
                     startConsoleMode(config.dataDirectory);
                     break;
                     
