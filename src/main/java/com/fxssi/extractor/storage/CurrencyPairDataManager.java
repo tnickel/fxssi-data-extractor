@@ -472,42 +472,69 @@ public class CurrencyPairDataManager {
         }
     }
     
-    /**
-     * Liest Daten aus einem Pfad
-     */
     private List<CurrencyPairData> readDataFromPath(Path filePath, String currencyPair) {
         List<CurrencyPairData> data = new ArrayList<>();
         
         if (!Files.exists(filePath)) {
-            LOGGER.fine("Datei für " + currencyPair + " existiert nicht: " + filePath.getFileName());
+            LOGGER.info("Datei für " + currencyPair + " existiert nicht: " + filePath.toAbsolutePath());
             return data;
         }
+        
+        LOGGER.info("Lade Daten für " + currencyPair + " aus: " + filePath.toAbsolutePath());
         
         try (BufferedReader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8)) {
             String line;
             boolean isFirstLine = true;
-            int lineNumber = 1;
+            int lineNumber = 0;
+            int successfullyParsed = 0;
+            int skippedLines = 0;
             
             while ((line = reader.readLine()) != null) {
                 lineNumber++;
                 
                 if (isFirstLine) {
                     isFirstLine = false;
-                    if (line.equals(getCurrencyPairCsvHeader())) {
+                    if (line.equals(getCurrencyPairCsvHeader()) || line.contains("Zeitstempel")) {
+                        LOGGER.fine("Header-Zeile erkannt und übersprungen: " + line);
                         continue;
+                    } else {
+                        // Erste Zeile ist kein Header, behandle als Datenzeile
+                        LOGGER.info("Keine Header-Zeile gefunden, beginne mit Datenzeile 1: " + line);
                     }
-                    lineNumber = 1; // Reset für korrekte Zeilennummerierung
+                }
+                
+                // Überspringe leere Zeilen
+                if (line.trim().isEmpty()) {
+                    skippedLines++;
+                    continue;
                 }
                 
                 try {
                     CurrencyPairData currencyData = parseCurrencyDataFromCsv(line, currencyPair);
                     data.add(currencyData);
+                    successfullyParsed++;
+                    
+                    if (successfullyParsed <= 3) {
+                        LOGGER.info("Beispiel-Datensatz " + successfullyParsed + ": " + currencyData.toString());
+                    }
+                    
                 } catch (Exception e) {
-                    LOGGER.fine("Ungültige CSV-Zeile " + lineNumber + " in " + currencyPair + " übersprungen: " + line);
+                    LOGGER.warning("Ungültige CSV-Zeile " + lineNumber + " in " + currencyPair + " übersprungen: " + line + " - Fehler: " + e.getMessage());
+                    skippedLines++;
                 }
             }
             
-            LOGGER.fine("Erfolgreich " + data.size() + " Datensätze für " + currencyPair + " geladen");
+            LOGGER.info("Datei-Analyse für " + currencyPair + " abgeschlossen:");
+            LOGGER.info("  - Gesamte Zeilen: " + lineNumber);
+            LOGGER.info("  - Erfolgreich geparst: " + successfullyParsed);
+            LOGGER.info("  - Übersprungen/Fehler: " + skippedLines);
+            LOGGER.info("  - Datensätze geladen: " + data.size());
+            
+            if (data.isEmpty()) {
+                LOGGER.warning("KEINE DATEN GELADEN für " + currencyPair + " - Überprüfen Sie das CSV-Format");
+            } else {
+                LOGGER.info("Erfolgreich " + data.size() + " Datensätze für " + currencyPair + " geladen");
+            }
             
         } catch (IOException e) {
             LOGGER.log(Level.WARNING, "Fehler beim Lesen der Datei für " + currencyPair + ": " + e.getMessage(), e);
@@ -612,34 +639,44 @@ public class CurrencyPairDataManager {
     private String getCurrencyPairCsvHeader() {
         return "Zeitstempel;Buy_Prozent;Sell_Prozent;Handelssignal";
     }
-    
-    /**
-     * Formatiert CurrencyPairData zu CSV-Zeile
-     */
     private String formatCurrencyDataToCsv(CurrencyPairData data) {
-        return String.format("%s;%.2f;%.2f;%s",
+        // Formatiere mit deutschen Dezimaltrennzeichen für Konsistenz mit bestehenden Dateien
+        String buyFormatted = String.format("%.2f", data.getBuyPercentage()).replace(".", ",");
+        String sellFormatted = String.format("%.2f", data.getSellPercentage()).replace(".", ",");
+        
+        return String.format("%s;%s;%s;%s",
             data.getTimestamp().format(TIMESTAMP_FORMATTER),
-            data.getBuyPercentage(),
-            data.getSellPercentage(),
+            buyFormatted,
+            sellFormatted,
             data.getTradingSignal().name()
         );
     }
     
-    /**
-     * Parst CSV-Zeile zu CurrencyPairData
-     */
     private CurrencyPairData parseCurrencyDataFromCsv(String csvLine, String currencyPair) {
         String[] parts = csvLine.split(";");
         if (parts.length != 4) {
             throw new IllegalArgumentException("Ungültiges CSV-Format: " + csvLine);
         }
         
-        LocalDateTime timestamp = LocalDateTime.parse(parts[0], TIMESTAMP_FORMATTER);
-        double buyPercentage = Double.parseDouble(parts[1]);
-        double sellPercentage = Double.parseDouble(parts[2]);
-        CurrencyPairData.TradingSignal signal = CurrencyPairData.TradingSignal.valueOf(parts[3]);
-        
-        return new CurrencyPairData(currencyPair, buyPercentage, sellPercentage, signal, timestamp);
+        try {
+            LocalDateTime timestamp = LocalDateTime.parse(parts[0], TIMESTAMP_FORMATTER);
+            
+            // *** FIX: Konvertiere deutsche Dezimaltrennzeichen (Komma) zu Punkt ***
+            String buyPercentageStr = parts[1].replace(",", ".");
+            String sellPercentageStr = parts[2].replace(",", ".");
+            
+            double buyPercentage = Double.parseDouble(buyPercentageStr);
+            double sellPercentage = Double.parseDouble(sellPercentageStr);
+            CurrencyPairData.TradingSignal signal = CurrencyPairData.TradingSignal.valueOf(parts[3]);
+            
+            LOGGER.fine("CSV-Zeile erfolgreich geparst: " + currencyPair + " - Buy: " + buyPercentage + "%, Sell: " + sellPercentage + "%");
+            
+            return new CurrencyPairData(currencyPair, buyPercentage, sellPercentage, signal, timestamp);
+            
+        } catch (Exception e) {
+            LOGGER.warning("Fehler beim Parsen der CSV-Zeile: " + csvLine + " - " + e.getMessage());
+            throw new IllegalArgumentException("Fehler beim Parsen der CSV-Zeile: " + csvLine, e);
+        }
     }
     
     // ===== INNERE KLASSEN =====
@@ -691,5 +728,39 @@ public class CurrencyPairDataManager {
         public int getValidRecords() { return validRecords; }
         public int getInvalidRecords() { return invalidRecords; }
         public boolean isValid() { return invalidRecords == 0; }
+    }
+    public void debugCsvParsing(String currencyPair) {
+        LOGGER.info("=== DEBUG CSV PARSING FÜR " + currencyPair + " ===");
+        
+        String normalizedPair = normalizeCurrencyPairName(currencyPair);
+        String filename = normalizedPair + FILE_EXTENSION;
+        Path filePath = currencyDataPath.resolve(filename);
+        
+        LOGGER.info("Normalisierter Name: " + normalizedPair);
+        LOGGER.info("Dateiname: " + filename);
+        LOGGER.info("Vollständiger Pfad: " + filePath.toAbsolutePath());
+        LOGGER.info("Datei existiert: " + Files.exists(filePath));
+        
+        if (Files.exists(filePath)) {
+            try {
+                long fileSize = Files.size(filePath);
+                LOGGER.info("Dateigröße: " + fileSize + " Bytes");
+                
+                // Lese erste paar Zeilen
+                try (BufferedReader reader = Files.newBufferedReader(filePath, StandardCharsets.UTF_8)) {
+                    LOGGER.info("Erste 5 Zeilen der Datei:");
+                    for (int i = 0; i < 5; i++) {
+                        String line = reader.readLine();
+                        if (line == null) break;
+                        LOGGER.info("Zeile " + (i+1) + ": " + line);
+                    }
+                }
+                
+            } catch (Exception e) {
+                LOGGER.warning("Fehler beim Debuggen: " + e.getMessage());
+            }
+        }
+        
+        LOGGER.info("=== ENDE DEBUG ===");
     }
 }

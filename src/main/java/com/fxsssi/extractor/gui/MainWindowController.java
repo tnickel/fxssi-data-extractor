@@ -15,6 +15,7 @@ import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.control.Alert;
 import javafx.scene.control.Button;
 import javafx.scene.control.CheckBox;
 import javafx.scene.control.Label;
@@ -37,10 +38,10 @@ import javafx.util.Callback;
 /**
  * Vollständige Java-GUI für das FXSSI Data Extractor Hauptfenster
  * Erstellt alle UI-Komponenten programmatisch ohne FXML mit konfigurierbarem Datenverzeichnis
- * Jetzt mit Signalwechsel-Spalte für Live-Wechsel-Erkennung
+ * Jetzt mit Signalwechsel-Spalte für Live-Wechsel-Erkennung UND historischen Daten Features
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.4 (mit vollständiger Signalwechsel-Integration)
+ * @version 1.5 (mit vollständiger historischer Daten Integration)
  */
 public class MainWindowController {
     
@@ -67,6 +68,8 @@ public class MainWindowController {
     private Label dataDirectoryLabel;
     private Label storageInfoLabel;
     private Button refreshButton;
+    private Button historicalDataButton; // NEU: Historische Daten Button
+    private Button debugButton; // NEU: Debug Button
     private Spinner<Integer> refreshIntervalSpinner;
     private CheckBox autoRefreshCheckBox;
     
@@ -89,7 +92,7 @@ public class MainWindowController {
     public MainWindowController(String dataDirectory) {
         this.dataDirectory = validateDataDirectory(dataDirectory);
         LOGGER.info("MainWindowController erstellt mit Datenverzeichnis: " + this.dataDirectory);
-        LOGGER.info("Signalwechsel-Erkennung aktiviert: Neue Wechsel-Spalte wird angezeigt");
+        LOGGER.info("Signalwechsel-Erkennung + Historische Daten aktiviert");
     }
     
     /**
@@ -98,7 +101,7 @@ public class MainWindowController {
     public Scene createMainWindow(Stage primaryStage) {
         this.stage = primaryStage;
         
-        LOGGER.info("Erstelle Hauptfenster mit Signalwechsel-Features...");
+        LOGGER.info("Erstelle Hauptfenster mit Signalwechsel + Historischen Daten Features...");
         LOGGER.info("Datenverzeichnis: " + dataDirectory);
         
         // Initialisiere Datenstrukturen
@@ -120,13 +123,13 @@ public class MainWindowController {
         root.setCenter(centerArea);
         root.setBottom(bottomArea);
         
-        // Erstelle Scene mit breiterem Fenster für neue Spalte
-        scene = new Scene(root, 1500, 800); // Noch breiter für Signalwechsel-Spalte
+        // Erstelle Scene mit noch breiterem Fenster für alle Features
+        scene = new Scene(root, 1600, 800); // Verbreitert für historische Daten Features
         
         // Lade CSS (falls vorhanden)
         loadStylesheets();
         
-        LOGGER.info("Hauptfenster erfolgreich erstellt (1500x800) mit Signalwechsel-Spalte");
+        LOGGER.info("Hauptfenster erfolgreich erstellt (1600x800) mit allen Features");
         return scene;
     }
     
@@ -158,7 +161,7 @@ public class MainWindowController {
         titleBar.setPadding(new Insets(10, 20, 10, 20));
         titleBar.getStyleClass().add("title-bar");
         
-        Label titleLabel = new Label("FXSSI Live Sentiment Monitor mit Signalwechsel-Erkennung");
+        Label titleLabel = new Label("FXSSI Live Sentiment Monitor mit Signalwechsel + Historischen Daten");
         titleLabel.setFont(Font.font("System", FontWeight.BOLD, 22));
         titleLabel.getStyleClass().add("title-label");
         
@@ -167,7 +170,7 @@ public class MainWindowController {
     }
     
     /**
-     * Erstellt die Toolbar mit Steuerelementen
+     * Erstellt die Toolbar mit Steuerelementen + NEUER historische Daten Button
      */
     private HBox createToolbar() {
         HBox toolbar = new HBox(15);
@@ -180,6 +183,18 @@ public class MainWindowController {
         refreshButton.setFont(Font.font(12));
         refreshButton.getStyleClass().add("refresh-button");
         refreshButton.setOnAction(event -> refreshData());
+        
+        // *** NEU: Historische Daten Button ***
+        historicalDataButton = new Button("📊 Historische Daten");
+        historicalDataButton.setFont(Font.font(12));
+        historicalDataButton.getStyleClass().add("historical-data-button");
+        historicalDataButton.setOnAction(event -> showHistoricalDataForSelectedPair());
+        
+        // *** NEU: Debug Button (temporär) ***
+        debugButton = new Button("🔧 Debug CSV");
+        debugButton.setFont(Font.font(10));
+        debugButton.getStyleClass().add("debug-button");
+        debugButton.setOnAction(event -> debugHistoricalDataLoading());
         
         // Separator
         Separator separator1 = new Separator();
@@ -228,8 +243,9 @@ public class MainWindowController {
         // Status-Bereich
         VBox statusArea = createStatusArea();
         
+        // *** ERWEITERTE Toolbar mit allen neuen Buttons ***
         toolbar.getChildren().addAll(
-            refreshButton, separator1, autoRefreshLabel, autoRefreshCheckBox,
+            refreshButton, historicalDataButton, debugButton, separator1, autoRefreshLabel, autoRefreshCheckBox,
             intervalLabel, refreshIntervalSpinner, spacer, statusArea
         );
         
@@ -257,7 +273,7 @@ public class MainWindowController {
         dataDirectoryLabel.getStyleClass().add("data-directory-label");
         
         // Speicher-Info-Label
-        storageInfoLabel = new Label("Speicherung: Tägliche + Währungspaar + Signalwechsel-Dateien");
+        storageInfoLabel = new Label("Speicherung: Tägliche + Währungspaar + Signalwechsel + Historische Daten");
         storageInfoLabel.setFont(Font.font(9));
         storageInfoLabel.getStyleClass().add("storage-info-label");
         
@@ -284,20 +300,20 @@ public class MainWindowController {
     }
     
     /**
-     * Erstellt den Tabellen-Header
+     * Erstellt den Tabellen-Header mit Hinweis auf historische Daten
      */
     private HBox createTableHeader() {
         HBox headerArea = new HBox(10);
         headerArea.setAlignment(Pos.CENTER_LEFT);
         
-        Label sectionHeader = new Label("Live Currency Sentiment Data mit Signalwechsel-Erkennung");
+        Label sectionHeader = new Label("Live Currency Sentiment Data mit Signalwechsel + Historischen Daten");
         sectionHeader.setFont(Font.font("System", FontWeight.BOLD, 16));
         sectionHeader.getStyleClass().add("section-header");
         
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        Label sectionDescription = new Label("🔄 Klicken Sie auf Wechsel-Icons für Details");
+        Label sectionDescription = new Label("🔄 Klicken Sie auf Wechsel-Icons für Details | 📊 Doppelklick für historische Daten");
         sectionDescription.setFont(Font.font(12));
         sectionDescription.getStyleClass().add("section-description");
         
@@ -306,11 +322,14 @@ public class MainWindowController {
     }
     
     /**
-     * Erstellt die Currency Table mit NEUER Signalwechsel-Spalte
+     * Erstellt die Currency Table mit AKTIVIERTER Selektion für historische Daten
      */
     private TableView<CurrencyPairTableRow> createCurrencyTable() {
         TableView<CurrencyPairTableRow> table = new TableView<>();
         table.getStyleClass().add("currency-table");
+        
+        // *** NEU: Aktiviere Selektion für historische Daten ***
+        table.getSelectionModel().setSelectionMode(javafx.scene.control.SelectionMode.SINGLE);
         
         // Symbol-Spalte
         symbolColumn = new TableColumn<>("Symbol");
@@ -325,7 +344,7 @@ public class MainWindowController {
         ratioColumn.setCellValueFactory(cellData -> 
             new javafx.beans.property.SimpleObjectProperty<>(cellData.getValue()));
         ratioColumn.setCellFactory(new RatioBarCellFactory());
-        ratioColumn.setPrefWidth(450); // Etwas schmaler für neue Spalte
+        ratioColumn.setPrefWidth(400); // Angepasst für mehr Spalten
         ratioColumn.getStyleClass().add("ratio-column");
         
         // Signal-Spalte
@@ -337,7 +356,7 @@ public class MainWindowController {
         signalColumn.setResizable(false);
         signalColumn.getStyleClass().add("signal-column");
         
-        // NEUE: Signalwechsel-Spalte
+        // Signalwechsel-Spalte
         changeColumn = new TableColumn<>("🔄 Wechsel");
         changeColumn.setCellValueFactory(cellData -> 
             new javafx.beans.property.SimpleObjectProperty<>(cellData.getValue()));
@@ -346,14 +365,24 @@ public class MainWindowController {
         changeColumn.setResizable(false);
         changeColumn.getStyleClass().add("change-column");
         
-        // Spalten zur Tabelle hinzufügen (MIT neuer Wechsel-Spalte)
+        // Spalten zur Tabelle hinzufügen
         table.getColumns().addAll(symbolColumn, ratioColumn, signalColumn, changeColumn);
         
         // Tabellen-Konfiguration
         table.setItems(tableData);
+        
+        // *** NEU: Row-Factory mit Selektion für historische Daten ***
         table.setRowFactory(tv -> {
             TableRow<CurrencyPairTableRow> row = new TableRow<>();
             row.getStyleClass().add("currency-table-row");
+            
+            // Doppelklick öffnet historische Daten
+            row.setOnMouseClicked(event -> {
+                if (event.getClickCount() == 2 && !row.isEmpty()) {
+                    showHistoricalDataForPair(row.getItem().getCurrencyPair());
+                }
+            });
+            
             return row;
         });
         
@@ -364,12 +393,12 @@ public class MainWindowController {
         // Spaltengrößen-Policy
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         
-        LOGGER.info("Tabelle erstellt mit 4 Spalten: Symbol, Ratio, Signal, Wechsel");
+        LOGGER.info("Tabelle erstellt mit Selektion für historische Daten + 4 Spalten");
         return table;
     }
     
     /**
-     * Erstellt den Placeholder für leere Tabelle mit Signalwechsel-Info
+     * Erstellt den Placeholder für leere Tabelle mit allen Features
      */
     private VBox createTablePlaceholder() {
         VBox placeholder = new VBox(10);
@@ -395,7 +424,12 @@ public class MainWindowController {
         changeHint.setFont(Font.font(10));
         changeHint.getStyleClass().add("placeholder-hint-small");
         
-        placeholder.getChildren().addAll(placeholderText, placeholderHint, dataDirectoryHint, storageHint, changeHint);
+        Label historicalHint = new Label("📊 Historische Daten: Button klicken oder Doppelklick auf Zeile");
+        historicalHint.setFont(Font.font(10));
+        historicalHint.getStyleClass().add("placeholder-hint-small");
+        
+        placeholder.getChildren().addAll(placeholderText, placeholderHint, dataDirectoryHint, 
+                                       storageHint, changeHint, historicalHint);
         return placeholder;
     }
     
@@ -408,14 +442,14 @@ public class MainWindowController {
         bottomArea.setPadding(new Insets(5, 20, 5, 20));
         bottomArea.getStyleClass().add("status-bar");
         
-        Label appInfo = new Label("FXSSI Data Extractor v1.4");
+        Label appInfo = new Label("FXSSI Data Extractor v1.5");
         appInfo.setFont(Font.font(10));
         appInfo.getStyleClass().add("app-info");
         
         Separator separator1 = new Separator();
         separator1.setOrientation(javafx.geometry.Orientation.VERTICAL);
         
-        Label appDescription = new Label("Sentiment-Analyse + Signalwechsel-Erkennung");
+        Label appDescription = new Label("Sentiment + Signalwechsel + Historische Daten");
         appDescription.setFont(Font.font(10));
         appDescription.getStyleClass().add("app-description");
         
@@ -430,14 +464,14 @@ public class MainWindowController {
         Separator separator3 = new Separator();
         separator3.setOrientation(javafx.geometry.Orientation.VERTICAL);
         
-        Label storageInfo = new Label("Speicherung: Täglich + Währungspaare + Signalwechsel");
+        Label storageInfo = new Label("Speicher: Täglich + Währungspaare + Signalwechsel + Historisch");
         storageInfo.setFont(Font.font(10));
         storageInfo.getStyleClass().add("storage-info");
         
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        Label dataSource = new Label("Live-Daten + Signalwechsel von FXSSI.com");
+        Label dataSource = new Label("Live + Historische Daten von FXSSI.com");
         dataSource.setFont(Font.font(10));
         dataSource.getStyleClass().add("data-source");
         
@@ -447,6 +481,139 @@ public class MainWindowController {
         );
         
         return bottomArea;
+    }
+    
+    /**
+     * *** NEUE METHODE: Zeigt historische Daten für das ausgewählte Währungspaar ***
+     */
+    private void showHistoricalDataForSelectedPair() {
+        CurrencyPairTableRow selectedItem = currencyTable.getSelectionModel().getSelectedItem();
+        
+        if (selectedItem == null) {
+            // Keine Auswahl - zeige Hinweis
+            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+            alert.setTitle("Kein Währungspaar ausgewählt");
+            alert.setHeaderText("Bitte wählen Sie ein Währungspaar aus");
+            alert.setContentText("Klicken Sie auf eine Zeile in der Tabelle, um ein Währungspaar auszuwählen, und versuchen Sie es erneut.\n\nAlternativ können Sie auch direkt auf eine Zeile doppelklicken.");
+            alert.showAndWait();
+            return;
+        }
+        
+        String currencyPair = selectedItem.getCurrencyPair();
+        showHistoricalDataForPair(currencyPair);
+    }
+    
+    /**
+     * *** NEUE METHODE: Zeigt historische Daten für ein bestimmtes Währungspaar ***
+     */
+    private void showHistoricalDataForPair(String currencyPair) {
+        try {
+            LOGGER.info("Öffne historische Daten für: " + currencyPair);
+            
+            // Erstelle und zeige das historische Daten-Fenster
+            HistoricalDataWindow historicalWindow = new HistoricalDataWindow(
+                stage, 
+                currencyPair, 
+                dataService
+            );
+            
+            historicalWindow.show();
+            
+        } catch (Exception e) {
+            LOGGER.severe("Fehler beim Öffnen der historischen Daten: " + e.getMessage());
+            
+            // Zeige Fehlermeldung
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Fehler");
+            alert.setHeaderText("Historische Daten konnten nicht geöffnet werden");
+            alert.setContentText("Fehler: " + e.getMessage() + 
+                "\n\nMögliche Ursachen:" +
+                "\n• CSV-Datei nicht gefunden" +
+                "\n• Deutsches Dezimalformat (Komma statt Punkt)" +
+                "\n• Ungültiges CSV-Format" +
+                "\n\nPrüfen Sie die Logs für Details.");
+            alert.showAndWait();
+        }
+    }
+    
+    /**
+     * *** NEUE METHODE: Debug-Methode zum Testen der CSV-Datenladung ***
+     */
+    private void debugHistoricalDataLoading() {
+        LOGGER.info("=== DEBUG: Teste historische Datenladung ===");
+        
+        try {
+            // Test mit verfügbaren Währungspaaren
+            LOGGER.info("Datenverzeichnis: " + dataService.getDataDirectory());
+            
+            // Lade verfügbare Währungspaare
+            Set<String> availablePairs = dataService.getAvailableCurrencyPairs();
+            LOGGER.info("Verfügbare Währungspaare: " + availablePairs);
+            LOGGER.info("Anzahl verfügbare Paare: " + availablePairs.size());
+            
+            if (availablePairs.isEmpty()) {
+                LOGGER.warning("KEINE WÄHRUNGSPAARE GEFUNDEN!");
+                showDebugAlert("Keine Währungspaare gefunden", 
+                    "Im Verzeichnis " + dataService.getDataDirectory() + "/currency_pairs/ wurden keine CSV-Dateien gefunden.");
+                return;
+            }
+            
+            // Teste mit erstem verfügbaren Währungspaar
+            String testCurrencyPair = availablePairs.iterator().next();
+            LOGGER.info("Teste mit Währungspaar: " + testCurrencyPair);
+            
+            // Teste historische Datenladung
+            List<CurrencyPairData> historicalData = dataService.getHistoricalDataForCurrencyPair(testCurrencyPair);
+            LOGGER.info("Geladene historische Daten: " + historicalData.size() + " Einträge");
+            
+            if (!historicalData.isEmpty()) {
+                LOGGER.info("Erste 3 Datensätze:");
+                for (int i = 0; i < Math.min(3, historicalData.size()); i++) {
+                    CurrencyPairData data = historicalData.get(i);
+                    LOGGER.info("  " + (i+1) + ": " + data.toString());
+                }
+                
+                showDebugAlert("Debug-Test erfolgreich", 
+                    "✅ Historische Daten erfolgreich geladen!\n\n" +
+                    "Währungspaar: " + testCurrencyPair + "\n" +
+                    "Gefundene Datensätze: " + historicalData.size() + "\n" +
+                    "Verfügbare Währungspaare: " + availablePairs.size() + "\n\n" +
+                    "Das historische Daten Feature sollte jetzt funktionieren.");
+                
+            } else {
+                LOGGER.warning("KEINE HISTORISCHEN DATEN GELADEN für " + testCurrencyPair);
+                showDebugAlert("Keine Daten geladen", 
+                    "❌ Keine historischen Daten für " + testCurrencyPair + " geladen.\n\n" +
+                    "Mögliche Ursachen:\n" +
+                    "• CSV-Datei ist leer\n" +
+                    "• Deutsches Dezimalformat (Komma statt Punkt)\n" +
+                    "• Ungültiges CSV-Format\n\n" +
+                    "Prüfen Sie die Logs für Details.");
+            }
+            
+        } catch (Exception e) {
+            LOGGER.severe("Fehler beim Debug-Test: " + e.getMessage());
+            e.printStackTrace();
+            
+            showDebugAlert("Debug-Test Fehler", 
+                "❌ Fehler beim Debug-Test:\n\n" + e.getMessage() + 
+                "\n\nPrüfen Sie die Logs für Details.");
+        }
+        
+        LOGGER.info("=== DEBUG-Test abgeschlossen ===");
+    }
+    
+    /**
+     * Hilfsmethode für Debug-Alerts
+     */
+    private void showDebugAlert(String title, String message) {
+        Platform.runLater(() -> {
+            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+            alert.setTitle("Debug: " + title);
+            alert.setHeaderText("CSV-Datenladung Debug-Test");
+            alert.setContentText(message);
+            alert.showAndWait();
+        });
     }
     
     /**
@@ -466,6 +633,7 @@ public class MainWindowController {
             }
             
             LOGGER.info("Datenservice gestartet mit Datenverzeichnis: " + dataDirectory);
+            LOGGER.info("Alle Features aktiviert: Live-Daten + Signalwechsel + Historische Daten");
             
             // Zeige initiale Statistiken
             updateStorageStatistics();
@@ -484,6 +652,7 @@ public class MainWindowController {
         Platform.runLater(() -> {
             updateStatus("Lade Daten und erkenne Signalwechsel...");
             refreshButton.setDisable(true);
+            if (historicalDataButton != null) historicalDataButton.setDisable(true);
         });
         
         // Lade Daten asynchron
@@ -498,6 +667,7 @@ public class MainWindowController {
                     lastUpdateLabel.setText("Letzte Aktualisierung: " + 
                         java.time.LocalTime.now().format(TIME_FORMATTER) + " (mit Signalwechsel-Check)");
                     refreshButton.setDisable(false);
+                    if (historicalDataButton != null) historicalDataButton.setDisable(false);
                     
                     // Aktualisiere Speicher-Statistiken
                     updateStorageStatistics();
@@ -514,6 +684,7 @@ public class MainWindowController {
                 Platform.runLater(() -> {
                     updateStatus("Fehler beim Laden der Daten: " + e.getMessage());
                     refreshButton.setDisable(false);
+                    if (historicalDataButton != null) historicalDataButton.setDisable(false);
                 });
             }
         }).start();
@@ -535,7 +706,7 @@ public class MainWindowController {
             tableData.add(row);
         }
         
-        LOGGER.fine("Tabelle mit " + data.size() + " Einträgen aktualisiert (inkl. Signalwechsel-Spalte)");
+        LOGGER.fine("Tabelle mit " + data.size() + " Einträgen aktualisiert (inkl. alle Features)");
     }
     
     /**
@@ -562,7 +733,7 @@ public class MainWindowController {
             GuiDataService.ExtendedDataStatistics stats = dataService.getExtendedDataStatistics();
             Set<String> availablePairs = dataService.getAvailableCurrencyPairs();
             
-            String storageText = String.format("Speicherung: %d tägl. Dateien, %d Währungspaare, Signalwechsel aktiv", 
+            String storageText = String.format("Speicherung: %d tägl. Dateien, %d Währungspaare, Signalwechsel + Historisch aktiv", 
                 stats.getTotalFiles(), availablePairs.size());
             
             Platform.runLater(() -> {
