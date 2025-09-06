@@ -13,9 +13,10 @@ import javafx.scene.layout.StackPane;
 /**
  * Custom TableCell für die Anzeige von horizontalen Ratio-Balken
  * Zeigt Buy-Percentage (blau) und Sell-Percentage (rot) als horizontale Balken an
+ * Verbesserte Behandlung von extremen Werten und sehr schmalen Balken
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.0
+ * @version 1.1 (verbesserte Behandlung extremer Werte)
  */
 public class RatioBarTableCell extends TableCell<CurrencyPairTableRow, CurrencyPairTableRow> {
     
@@ -29,6 +30,7 @@ public class RatioBarTableCell extends TableCell<CurrencyPairTableRow, CurrencyP
     
     private static final double BAR_HEIGHT = 25.0;
     private static final double CONTAINER_WIDTH = 350.0;
+    private static final double MIN_VISIBLE_WIDTH = 8.0; // Minimum sichtbare Breite für sehr kleine Balken
     private static final String BUY_BAR_STYLE = "-fx-background-color: #5B9BD5; -fx-background-radius: 3 0 0 3;";
     private static final String SELL_BAR_STYLE = "-fx-background-color: #E74C3C; -fx-background-radius: 0 3 3 0;";
     private static final String LABEL_STYLE = "-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 12px;";
@@ -78,6 +80,9 @@ public class RatioBarTableCell extends TableCell<CurrencyPairTableRow, CurrencyP
         // Styling für die gesamte Zelle
         this.setPadding(new Insets(2, 5, 2, 5));
         this.setAlignment(Pos.CENTER);
+        
+        // Füge Hover-Effekte hinzu
+        addHoverEffects();
     }
     
     @Override
@@ -108,6 +113,19 @@ public class RatioBarTableCell extends TableCell<CurrencyPairTableRow, CurrencyP
         double buyWidth = (buyPercentage / 100.0) * CONTAINER_WIDTH;
         double sellWidth = (sellPercentage / 100.0) * CONTAINER_WIDTH;
         
+        // Behandlung für sehr extreme Werte (sehr schmale Balken)
+        boolean buyVerySmall = buyWidth < MIN_VISIBLE_WIDTH;
+        boolean sellVerySmall = sellWidth < MIN_VISIBLE_WIDTH;
+        
+        // Stelle sicher, dass sehr kleine Balken mindestens sichtbar sind
+        if (buyVerySmall && buyPercentage > 0) {
+            buyWidth = MIN_VISIBLE_WIDTH;
+            sellWidth = CONTAINER_WIDTH - MIN_VISIBLE_WIDTH;
+        } else if (sellVerySmall && sellPercentage > 0) {
+            sellWidth = MIN_VISIBLE_WIDTH;
+            buyWidth = CONTAINER_WIDTH - MIN_VISIBLE_WIDTH;
+        }
+        
         // Setze Balkenbreiten
         buyBar.setPrefWidth(buyWidth);
         buyBar.setMaxWidth(buyWidth);
@@ -127,41 +145,63 @@ public class RatioBarTableCell extends TableCell<CurrencyPairTableRow, CurrencyP
         sellBarContainer.setMinWidth(sellWidth);
         
         // Setze Label-Texte
-        buyLabel.setText(String.format("%.0f%%", buyPercentage));
-        sellLabel.setText(String.format("%.0f%%", sellPercentage));
+        buyLabel.setText(String.format("%.0f%%", item.getBuyPercentage())); // Verwende original Werte für Label
+        sellLabel.setText(String.format("%.0f%%", item.getSellPercentage()));
         
-        // Verstecke Labels bei sehr schmalen Balken
-        buyLabel.setVisible(buyWidth > 30);
-        sellLabel.setVisible(sellWidth > 30);
+        // Verstecke Labels bei sehr schmalen Balken, aber zeige sie bei extremen Werten in Tooltip
+        boolean showBuyLabel = buyWidth > 35 || (!buyVerySmall && buyWidth > 20);
+        boolean showSellLabel = sellWidth > 35 || (!sellVerySmall && sellWidth > 20);
         
-        // Spezielle Styling-Anpassungen basierend auf Werten
-        updateBarStyling(buyPercentage, sellPercentage);
+        buyLabel.setVisible(showBuyLabel);
+        sellLabel.setVisible(showSellLabel);
+        
+        // Spezielle Styling-Anpassungen basierend auf den Werten
+        updateBarStyling(item.getBuyPercentage(), item.getSellPercentage(), buyVerySmall, sellVerySmall);
+        
+        // Erweiterte Tooltip-Informationen für extreme Werte
+        updateTooltip(item);
         
         setGraphic(ratioContainer);
     }
     
     /**
-     * Aktualisiert das Styling der Balken basierend auf den Werten
+     * Aktualisiert das Styling der Balken basierend auf den Werten und extremen Fällen
      */
-    private void updateBarStyling(double buyPercentage, double sellPercentage) {
+    private void updateBarStyling(double buyPercentage, double sellPercentage, boolean buyVerySmall, boolean sellVerySmall) {
         // Basis-Styles
         String buyStyle = BUY_BAR_STYLE;
         String sellStyle = SELL_BAR_STYLE;
         
-        // Spezielle Radius-Behandlung wenn einer der Balken sehr klein ist
-        if (buyPercentage < 5) {
-            // Buy-Balken sehr klein, Sell-Balken bekommt linken Radius
+        // Spezielle Radius-Behandlung für extreme Werte
+        if (buyVerySmall || buyPercentage < 3) {
+            // Buy-Balken sehr klein, Sell-Balken bekommt kompletten Radius
             sellStyle = "-fx-background-color: #E74C3C; -fx-background-radius: 3;";
-        } else if (sellPercentage < 5) {
-            // Sell-Balken sehr klein, Buy-Balken bekommt rechten Radius
+            buyStyle = "-fx-background-color: #5B9BD5; -fx-background-radius: 3;"; // Kompletter Radius für sichtbarkeit
+        } else if (sellVerySmall || sellPercentage < 3) {
+            // Sell-Balken sehr klein, Buy-Balken bekommt kompletten Radius
             buyStyle = "-fx-background-color: #5B9BD5; -fx-background-radius: 3;";
+            sellStyle = "-fx-background-color: #E74C3C; -fx-background-radius: 3;"; // Kompletter Radius für sichtbarkeit
         }
         
         // Farbintensität basierend auf extremen Werten
-        if (buyPercentage > 70) {
-            buyStyle = "-fx-background-color: #2E86AB; -fx-background-radius: 3 0 0 3;"; // Dunkleres Blau
+        if (buyPercentage > 80) {
+            buyStyle = buyStyle.replace("#5B9BD5", "#1F4E79"); // Sehr dunkles Blau für extreme Werte
+        } else if (buyPercentage > 70) {
+            buyStyle = buyStyle.replace("#5B9BD5", "#2E86AB"); // Dunkleres Blau
+        }
+        
+        if (sellPercentage > 80) {
+            sellStyle = sellStyle.replace("#E74C3C", "#922B21"); // Sehr dunkles Rot für extreme Werte
         } else if (sellPercentage > 70) {
-            sellStyle = "-fx-background-color: #C0392B; -fx-background-radius: 0 3 3 0;"; // Dunkleres Rot
+            sellStyle = sellStyle.replace("#E74C3C", "#C0392B"); // Dunkleres Rot
+        }
+        
+        // Spezielle Hervorhebung für sehr kleine aber sichtbare Balken
+        if (buyVerySmall && buyPercentage > 0) {
+            buyStyle += " -fx-border-color: #34495E; -fx-border-width: 1;"; // Border für bessere Sichtbarkeit
+        }
+        if (sellVerySmall && sellPercentage > 0) {
+            sellStyle += " -fx-border-color: #34495E; -fx-border-width: 1;"; // Border für bessere Sichtbarkeit
         }
         
         buyBar.setStyle(buyStyle);
@@ -169,32 +209,69 @@ public class RatioBarTableCell extends TableCell<CurrencyPairTableRow, CurrencyP
     }
     
     /**
-     * Berechnet die optimale Textfarbe basierend auf der Hintergrundfarbe
+     * Aktualisiert Tooltip mit detaillierten Informationen
      */
-    private String getOptimalTextColor(double percentage) {
-        // Bei sehr extremen Werten (dunklere Farben) verwende weiße Schrift
-        if (percentage > 70) {
-            return "-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 12px;";
-        } else {
-            return "-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 12px;";
+    private void updateTooltip(CurrencyPairTableRow item) {
+        String tooltipText = String.format(
+            "%s\nBuy: %.1f%% | Sell: %.1f%%\nSignal: %s\n\n" +
+            "Linker Balken (Blau) = Buy/Long Positionen\n" +
+            "Rechter Balken (Rot) = Sell/Short Positionen",
+            item.getCurrencyPair(),
+            item.getBuyPercentage(),
+            item.getSellPercentage(),
+            item.getTradingSignal().getDescription()
+        );
+        
+        // Spezielle Hinweise für extreme Werte
+        if (item.getBuyPercentage() > 80) {
+            tooltipText += "\n⚠️ Sehr hohe Buy-Dominanz (>80%)";
+        } else if (item.getSellPercentage() > 80) {
+            tooltipText += "\n⚠️ Sehr hohe Sell-Dominanz (>80%)";
         }
+        
+        javafx.scene.control.Tooltip tooltip = new javafx.scene.control.Tooltip(tooltipText);
+        tooltip.setShowDelay(javafx.util.Duration.millis(500));
+        this.setTooltip(tooltip);
     }
     
     /**
-     * Fügt Hover-Effekte hinzu
+     * Füge Hover-Effekte hinzu für bessere Interaktivität
      */
     private void addHoverEffects() {
         ratioContainer.setOnMouseEntered(event -> {
+            // Sanfter Schatten-Effekt beim Hover
             buyBar.setStyle(buyBar.getStyle() + " -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 3, 0, 0, 1);");
             sellBar.setStyle(sellBar.getStyle() + " -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 3, 0, 0, 1);");
+            
+            // Leichte Vergrößerung
+            ratioContainer.setScaleY(1.05);
         });
         
         ratioContainer.setOnMouseExited(event -> {
-            // Entferne Schatten-Effekt
-            String buyStyle = buyBar.getStyle().replace(" -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 3, 0, 0, 1);", "");
-            String sellStyle = sellBar.getStyle().replace(" -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 3, 0, 0, 1);", "");
+            // Entferne Effekte
+            String buyStyle = buyBar.getStyle().replaceAll(" -fx-effect: dropshadow\\([^;]*\\);?", "");
+            String sellStyle = sellBar.getStyle().replaceAll(" -fx-effect: dropshadow\\([^;]*\\);?", "");
             buyBar.setStyle(buyStyle);
             sellBar.setStyle(sellStyle);
+            
+            // Zurück zur normalen Größe
+            ratioContainer.setScaleY(1.0);
         });
+    }
+    
+    /**
+     * Berechnet die optimale Textfarbe basierend auf der Hintergrundfarbe
+     */
+    private String getOptimalTextColor(double percentage, boolean isVerySmall) {
+        if (isVerySmall) {
+            // Bei sehr kleinen Balken ist weiße Schrift immer am besten sichtbar
+            return "-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 10px;";
+        } else if (percentage > 70) {
+            // Bei sehr dunklen Farben verwende weiße Schrift
+            return "-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 12px;";
+        } else {
+            // Standard weiße Schrift
+            return "-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 12px;";
+        }
     }
 }

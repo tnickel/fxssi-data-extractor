@@ -37,7 +37,7 @@ import javafx.util.Callback;
  * Erstellt alle UI-Komponenten programmatisch ohne FXML mit konfigurierbarem Datenverzeichnis
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.1 (mit konfigurierbarem Datenverzeichnis)
+ * @version 1.2 (mit breiterem Fenster für bessere Balken-Sichtbarkeit)
  */
 public class MainWindowController {
     
@@ -114,13 +114,13 @@ public class MainWindowController {
         root.setCenter(centerArea);
         root.setBottom(bottomArea);
         
-        // Erstelle Scene
-        scene = new Scene(root, 1200, 800);
+        // Erstelle Scene mit breiterem Fenster für bessere Balken-Sichtbarkeit
+        scene = new Scene(root, 1400, 800); // 200px breiter als vorher
         
         // Lade CSS (falls vorhanden)
         loadStylesheets();
         
-        LOGGER.info("Hauptfenster erfolgreich erstellt");
+        LOGGER.info("Hauptfenster erfolgreich erstellt (1400x800)");
         return scene;
     }
     
@@ -292,7 +292,7 @@ public class MainWindowController {
     }
     
     /**
-     * Erstellt die Currency Table
+     * Erstellt die Currency Table mit breiteren Spalten für bessere Sichtbarkeit
      */
     private TableView<CurrencyPairTableRow> createCurrencyTable() {
         TableView<CurrencyPairTableRow> table = new TableView<>();
@@ -306,12 +306,12 @@ public class MainWindowController {
         symbolColumn.setResizable(false);
         symbolColumn.getStyleClass().add("symbol-column");
         
-        // Ratio-Spalte
+        // Ratio-Spalte - breiter für längere Balken
         ratioColumn = new TableColumn<>("Ratio");
         ratioColumn.setCellValueFactory(cellData -> 
             new javafx.beans.property.SimpleObjectProperty<>(cellData.getValue()));
         ratioColumn.setCellFactory(new RatioBarCellFactory());
-        ratioColumn.setPrefWidth(400);
+        ratioColumn.setPrefWidth(520); // Erweitert von 400 auf 520 für längere Balken
         ratioColumn.getStyleClass().add("ratio-column");
         
         // Signal-Spalte
@@ -376,7 +376,7 @@ public class MainWindowController {
         bottomArea.setPadding(new Insets(5, 20, 5, 20));
         bottomArea.getStyleClass().add("status-bar");
         
-        Label appInfo = new Label("FXSSI Data Extractor v1.1");
+        Label appInfo = new Label("FXSSI Data Extractor v1.2");
         appInfo.setFont(Font.font(10));
         appInfo.getStyleClass().add("app-info");
         

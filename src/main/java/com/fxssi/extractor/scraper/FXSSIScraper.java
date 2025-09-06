@@ -19,10 +19,10 @@ import java.util.regex.Pattern;
 
 /**
  * Web-Scraper-Klasse für das Extrahieren von FXSSI Current Ratio Daten
- * Verwendet JSoup für das Parsen der HTML-Seite mit echten FXSSI CSS-Selektoren
+ * Verwendet JSoup für das Parsen der HTML-Seite mit korrekter FXSSI-Struktur-Erkennung
  * 
  * @author Generated for FXSSI Data Extraction
- * @version 1.3 (mit echten FXSSI-Selektoren und Debug-HTML-Speicherung)
+ * @version 1.4 (mit korrekter HTML-Struktur-Erkennung für .line/.symbol/.ratio Elemente)
  */
 public class FXSSIScraper {
     
@@ -94,21 +94,27 @@ public class FXSSIScraper {
             LOGGER.fine("Titel: " + document.title());
             LOGGER.fine("Body-Klassen: " + document.body().className());
             
-            // Suche nach FXSSI-spezifischen Elementen
+            // Suche nach FXSSI-spezifischen Elementen mit neuer Struktur-Erkennung
             Elements sentimentRatios = document.select(".sentiment-ratios");
-            LOGGER.fine("Sentiment-Ratios Elemente: " + sentimentRatios.size());
+            LOGGER.fine("Sentiment-Ratios Container: " + sentimentRatios.size());
             
-            Elements curRatPairs = document.select(".cur-rat-pairs");
-            LOGGER.fine("Cur-Rat-Pairs Elemente: " + curRatPairs.size());
+            Elements lineElements = document.select(".line");
+            LOGGER.fine("Line Elemente gefunden: " + lineElements.size());
             
-            Elements thePairs = document.select("#thePairs");
-            LOGGER.fine("ThePairs Element: " + thePairs.size());
+            Elements symbolElements = document.select(".symbol");
+            LOGGER.fine("Symbol Elemente gefunden: " + symbolElements.size());
             
-            Elements textRatios = document.select(".text-ratio");
-            LOGGER.fine("Text-Ratio Elemente: " + textRatios.size());
+            Elements ratioElements = document.select(".ratio");
+            LOGGER.fine("Ratio Elemente gefunden: " + ratioElements.size());
             
-            Elements percentElements = document.select("*:contains(%)");
-            LOGGER.fine("Elemente mit %: " + percentElements.size());
+            Elements ratioBarLeft = document.select(".ratio-bar-left");
+            LOGGER.fine("Ratio-Bar-Left Elemente gefunden: " + ratioBarLeft.size());
+            
+            Elements ratioBarRight = document.select(".ratio-bar-right");
+            LOGGER.fine("Ratio-Bar-Right Elemente gefunden: " + ratioBarRight.size());
+            
+            Elements signalElements = document.select(".signal");
+            LOGGER.fine("Signal Elemente gefunden: " + signalElements.size());
             
             LOGGER.fine("=== ENDE DOKUMENT-ANALYSE ===");
         }
@@ -132,11 +138,11 @@ public class FXSSIScraper {
             // Speichere komplette HTML-Seite (überschreibt vorherige)
             saveCompleteHtml(document, debugPath);
             
-            // Speichere Struktur-Analyse
-            saveStructureAnalysis(document, debugPath);
+            // Speichere Struktur-Analyse mit neuer Erkennung
+            saveStructureAnalysisUpdated(document, debugPath);
             
-            // Speichere relevante Bereiche
-            saveRelevantSections(document, debugPath);
+            // Speichere relevante Bereiche mit neuer Struktur
+            saveRelevantSectionsUpdated(document, debugPath);
             
             LOGGER.info("HTML-Debug-Dateien gespeichert in: " + debugPath.toAbsolutePath());
             
@@ -159,111 +165,96 @@ public class FXSSIScraper {
     }
     
     /**
-     * Speichert eine detaillierte Struktur-Analyse
+     * Speichert eine aktualisierte Struktur-Analyse mit neuer Erkennung
      */
-    private void saveStructureAnalysis(Document document, java.nio.file.Path debugPath) {
+    private void saveStructureAnalysisUpdated(Document document, java.nio.file.Path debugPath) {
         try {
             java.nio.file.Path structureFile = debugPath.resolve("fxssi_structure.txt");
             StringBuilder analysis = new StringBuilder();
             
-            analysis.append("FXSSI Website Struktur-Analyse\n");
-            analysis.append("==============================\n");
+            analysis.append("FXSSI Website Struktur-Analyse (Aktualisiert)\n");
+            analysis.append("=============================================\n");
             analysis.append("URL: ").append(FXSSI_URL).append("\n");
             analysis.append("Zeitstempel: ").append(java.time.LocalDateTime.now()).append("\n");
             analysis.append("Titel: ").append(document.title()).append("\n\n");
             
-            // Body-Analyse
-            analysis.append("Body-Klassen: ").append(document.body().className()).append("\n\n");
+            // Neue Struktur-Analyse basierend auf der erkannten HTML-Struktur
+            analysis.append("=== NEUE FXSSI STRUKTUR-ERKENNUNG ===\n");
             
-            // Tabellen-Analyse
-            Elements tables = document.select("table");
-            analysis.append("=== TABELLEN (").append(tables.size()).append(") ===\n");
-            for (int i = 0; i < tables.size(); i++) {
-                Element table = tables.get(i);
-                analysis.append("Tabelle ").append(i+1).append(":\n");
-                analysis.append("  ID: ").append(table.id()).append("\n");
-                analysis.append("  Klassen: ").append(table.className()).append("\n");
-                analysis.append("  Zeilen: ").append(table.select("tr").size()).append("\n");
-                String tableText = table.text();
-                analysis.append("  Text (ersten 100 Zeichen): ").append(tableText.substring(0, Math.min(100, tableText.length()))).append("\n\n");
-            }
+            Elements sentimentRatios = document.select(".sentiment-ratios");
+            analysis.append("Sentiment-Ratios Container: ").append(sentimentRatios.size()).append("\n");
             
-            // Div-Analyse
-            analysis.append("=== RELEVANTE DIV-ELEMENTE ===\n");
-            String[] keywords = {"sentiment", "ratio", "current", "currency", "pair", "instrument", "live", "table", "row"};
-            for (String keyword : keywords) {
-                Elements divs = document.select("div[class*='" + keyword + "'], div[id*='" + keyword + "']");
-                analysis.append(keyword.toUpperCase()).append(" divs: ").append(divs.size()).append("\n");
-                for (int i = 0; i < Math.min(3, divs.size()); i++) {
-                    Element div = divs.get(i);
-                    analysis.append("  - ID: ").append(div.id()).append(", Klassen: ").append(div.className()).append("\n");
-                }
-            }
+            Elements lineElements = document.select(".line");
+            analysis.append("Line Elemente (.line): ").append(lineElements.size()).append("\n");
             
-            // Prozent-Elemente
-            analysis.append("\n=== ELEMENTE MIT PROZENTANGABEN ===\n");
-            Elements percentElements = document.select("*:contains(%)");
-            analysis.append("Gefundene Elemente mit %: ").append(percentElements.size()).append("\n");
-            
-            // Währungspaar-Elemente
-            analysis.append("\n=== WÄHRUNGSPAAR-ELEMENTE ===\n");
-            String[] pairs = {"EURUSD", "GBPUSD", "USDJPY", "AUDJPY", "AUDUSD"};
-            for (String pair : pairs) {
-                Elements pairElements = document.select("*:contains(" + pair + ")");
-                if (!pairElements.isEmpty()) {
-                    analysis.append(pair).append(": ").append(pairElements.size()).append(" Elemente\n");
+            if (!lineElements.isEmpty()) {
+                analysis.append("\nDetaillierte Analyse der .line Elemente:\n");
+                for (int i = 0; i < Math.min(5, lineElements.size()); i++) {
+                    Element line = lineElements.get(i);
+                    analysis.append("Line ").append(i+1).append(":\n");
+                    
+                    Elements symbols = line.select(".symbol");
+                    if (!symbols.isEmpty()) {
+                        analysis.append("  Symbol: ").append(symbols.first().text()).append("\n");
+                    }
+                    
+                    Elements ratios = line.select(".ratio");
+                    if (!ratios.isEmpty()) {
+                        Elements leftBars = ratios.select(".ratio-bar-left");
+                        Elements rightBars = ratios.select(".ratio-bar-right");
+                        
+                        if (!leftBars.isEmpty()) {
+                            analysis.append("  Left Ratio: ").append(leftBars.first().text()).append("\n");
+                        }
+                        if (!rightBars.isEmpty()) {
+                            analysis.append("  Right Ratio: ").append(rightBars.first().text()).append("\n");
+                        }
+                    }
+                    
+                    Elements signals = line.select(".signal");
+                    if (!signals.isEmpty()) {
+                        analysis.append("  Signal: ").append(signals.first().className()).append("\n");
+                    }
+                    analysis.append("\n");
                 }
             }
             
             java.nio.file.Files.write(structureFile, analysis.toString().getBytes("UTF-8"));
-            LOGGER.fine("Struktur-Analyse gespeichert: " + structureFile.getFileName());
+            LOGGER.fine("Aktualisierte Struktur-Analyse gespeichert: " + structureFile.getFileName());
             
         } catch (Exception e) {
-            LOGGER.warning("Fehler beim Speichern der Struktur-Analyse: " + e.getMessage());
+            LOGGER.warning("Fehler beim Speichern der aktualisierten Struktur-Analyse: " + e.getMessage());
         }
     }
     
     /**
-     * Speichert relevante HTML-Bereiche
+     * Speichert relevante HTML-Bereiche mit neuer Struktur-Erkennung
      */
-    private void saveRelevantSections(Document document, java.nio.file.Path debugPath) {
+    private void saveRelevantSectionsUpdated(Document document, java.nio.file.Path debugPath) {
         try {
-            // Speichere Bereiche mit Währungspaaren
-            java.nio.file.Path currencyFile = debugPath.resolve("fxssi_currency_sections.html");
-            StringBuilder currencyHtml = new StringBuilder();
-            currencyHtml.append("<!-- Bereiche mit Währungspaaren -->\n\n");
+            java.nio.file.Path relevantFile = debugPath.resolve("fxssi_relevant_sections.html");
+            StringBuilder relevantHtml = new StringBuilder();
             
-            String[] currencyPairs = {"EURUSD", "GBPUSD", "USDJPY", "AUDUSD", "AUDJPY", "USDCHF"};
-            for (String pair : currencyPairs) {
-                Elements elements = document.select("*:contains(" + pair + ")");
-                if (!elements.isEmpty()) {
-                    currencyHtml.append("<!-- GEFUNDEN FÜR ").append(pair).append(": ").append(elements.size()).append(" ELEMENTE -->\n");
-                    for (int i = 0; i < Math.min(3, elements.size()); i++) {
-                        Element element = elements.get(i);
-                        currencyHtml.append("<!-- Element ").append(i+1).append(": ").append(element.tagName()).append(" -->\n");
-                        currencyHtml.append("<!-- Klassen: ").append(element.className()).append(" -->\n");
-                        currencyHtml.append(element.outerHtml()).append("\n\n");
-                    }
-                }
+            relevantHtml.append("<!-- FXSSI Relevante Bereiche (Neue Struktur) -->\n\n");
+            
+            // Extrahiere .sentiment-ratios Container
+            Elements sentimentRatios = document.select(".sentiment-ratios");
+            if (!sentimentRatios.isEmpty()) {
+                relevantHtml.append("<!-- SENTIMENT-RATIOS CONTAINER -->\n");
+                relevantHtml.append(sentimentRatios.first().outerHtml()).append("\n\n");
             }
             
-            // Speichere FXSSI-spezifische Bereiche
-            currencyHtml.append("<!-- FXSSI-SPEZIFISCHE BEREICHE -->\n\n");
-            String[] fxssiSelectors = {".sentiment-ratios", ".cur-rat-pairs", "#thePairs", ".text-ratio"};
-            for (String selector : fxssiSelectors) {
-                Elements elements = document.select(selector);
-                if (!elements.isEmpty()) {
-                    currencyHtml.append("<!-- SELEKTOR: ").append(selector).append(" (").append(elements.size()).append(" Elemente) -->\n");
-                    for (int i = 0; i < Math.min(5, elements.size()); i++) {
-                        Element element = elements.get(i);
-                        currencyHtml.append("<!-- Element ").append(i+1).append(" -->\n");
-                        currencyHtml.append(element.outerHtml()).append("\n\n");
-                    }
-                }
+            // Extrahiere einzelne .line Elemente
+            Elements lineElements = document.select(".line");
+            relevantHtml.append("<!-- EINZELNE .LINE ELEMENTE (").append(lineElements.size()).append(" GEFUNDEN) -->\n");
+            for (int i = 0; i < Math.min(10, lineElements.size()); i++) {
+                Element line = lineElements.get(i);
+                relevantHtml.append("<!-- LINE ").append(i+1).append(" -->\n");
+                relevantHtml.append(line.outerHtml()).append("\n\n");
             }
             
-            java.nio.file.Files.write(currencyFile, currencyHtml.toString().getBytes("UTF-8"));
-            LOGGER.fine("Currency-Bereiche gespeichert: " + currencyFile.getFileName());
+            java.nio.file.Files.write(relevantFile, relevantHtml.toString().getBytes("UTF-8"));
+            LOGGER.fine("Relevante Bereiche (neue Struktur) gespeichert: " + relevantFile.getFileName());
             
         } catch (Exception e) {
             LOGGER.warning("Fehler beim Speichern der relevanten Bereiche: " + e.getMessage());
@@ -297,19 +288,24 @@ public class FXSSIScraper {
     }
     
     /**
-     * Parst die Current Ratio Daten aus dem HTML-Dokument
+     * Parst die Current Ratio Daten aus dem HTML-Dokument mit korrekter Struktur-Erkennung
      */
     private List<CurrencyPairData> parseCurrentRatioData(Document document) {
         List<CurrencyPairData> currencyData = new ArrayList<>();
         
-        LOGGER.info("Beginne Parsing der Current Ratio Daten...");
+        LOGGER.info("Beginne Parsing der Current Ratio Daten mit neuer Struktur-Erkennung...");
         
         try {
-            // Versuche echte FXSSI-Selektoren zuerst
-            currencyData = tryFXSSISelectors(document);
+            // Neue Hauptstrategie: Korrekte FXSSI-Struktur-Erkennung
+            currencyData = parseCorrectFXSSIStructure(document);
             
             if (currencyData.isEmpty()) {
-                LOGGER.warning("FXSSI-Selektoren lieferten keine Ergebnisse, versuche Tabellen-Parsing");
+                LOGGER.warning("Neue Struktur-Erkennung lieferte keine Ergebnisse, versuche Fallback-Strategien");
+                currencyData = tryFXSSISelectors(document);
+            }
+            
+            if (currencyData.isEmpty()) {
+                LOGGER.warning("FXSSI-Selektoren fehlgeschlagen, versuche Tabellen-Parsing");
                 currencyData = tryTableParsing(document);
             }
             
@@ -332,36 +328,228 @@ public class FXSSIScraper {
     }
     
     /**
-     * Versucht echte FXSSI CSS-Selektoren basierend auf Struktur-Analyse
+     * Neue Hauptmethode: Parst die korrekte FXSSI-Struktur mit .line/.symbol/.ratio Elementen
+     */
+    private List<CurrencyPairData> parseCorrectFXSSIStructure(Document document) {
+        List<CurrencyPairData> currencyData = new ArrayList<>();
+        
+        LOGGER.info("Verwende korrekte FXSSI-Struktur-Erkennung (.line/.symbol/.ratio)...");
+        
+        // Suche nach .line Elementen innerhalb von .sentiment-ratios
+        Elements lineElements = document.select(".sentiment-ratios .line");
+        
+        if (lineElements.isEmpty()) {
+            // Fallback: Suche nach .line Elementen überall
+            lineElements = document.select(".line");
+            LOGGER.info("Fallback: Suche .line Elemente überall, gefunden: " + lineElements.size());
+        } else {
+            LOGGER.info("Gefundene .line Elemente in .sentiment-ratios: " + lineElements.size());
+        }
+        
+        for (Element lineElement : lineElements) {
+            try {
+                CurrencyPairData pairData = parseLineElement(lineElement);
+                if (pairData != null) {
+                    currencyData.add(pairData);
+                    LOGGER.fine("Line-Element erfolgreich geparst: " + pairData.getCurrencyPair());
+                }
+            } catch (Exception e) {
+                LOGGER.fine("Fehler beim Parsing eines Line-Elements: " + e.getMessage());
+            }
+        }
+        
+        LOGGER.info("Korrekte FXSSI-Struktur-Erkennung: " + currencyData.size() + " Datensätze gefunden");
+        return currencyData;
+    }
+    
+    /**
+     * Parst ein einzelnes .line Element mit der korrekten FXSSI-Struktur
+     */
+    private CurrencyPairData parseLineElement(Element lineElement) {
+        try {
+            // Extrahiere Währungspaar aus .symbol
+            Elements symbolElements = lineElement.select(".symbol");
+            if (symbolElements.isEmpty()) {
+                LOGGER.fine("Kein .symbol Element in .line gefunden");
+                return null;
+            }
+            
+            String currencyPair = symbolElements.first().text().trim();
+            if (currencyPair.isEmpty()) {
+                LOGGER.fine("Leeres Währungspaar in .symbol gefunden");
+                return null;
+            }
+            
+            // Formatiere Währungspaar
+            currencyPair = formatCurrencyPair(currencyPair);
+            
+            // Extrahiere Prozentangaben aus .ratio
+            Elements ratioElements = lineElement.select(".ratio");
+            if (ratioElements.isEmpty()) {
+                LOGGER.fine("Kein .ratio Element in .line gefunden für: " + currencyPair);
+                return null;
+            }
+            
+            Element ratioElement = ratioElements.first();
+            
+            // Extrahiere linke Prozentangabe (.ratio-bar-left)
+            double leftPercentage = extractPercentageFromRatioBar(ratioElement, ".ratio-bar-left");
+            
+            // Extrahiere rechte Prozentangabe (.ratio-bar-right)
+            double rightPercentage = extractPercentageFromRatioBar(ratioElement, ".ratio-bar-right");
+            
+            if (leftPercentage < 0 || rightPercentage < 0) {
+                LOGGER.fine("Ungültige Prozentangaben für: " + currencyPair + 
+                           " (left: " + leftPercentage + ", right: " + rightPercentage + ")");
+                return null;
+            }
+            
+            // Extrahiere Signal aus .signal
+            TradingSignal signal = extractTradingSignalFromLineElement(lineElement);
+            
+            // Interpretiere die Prozentangaben basierend auf FXSSI-Logik
+            // Links = Buy, Rechts = Sell (basierend auf der Website-Analyse)
+            double buyPercentage = leftPercentage;
+            double sellPercentage = rightPercentage;
+            
+            // Validierung und Normalisierung
+            double total = buyPercentage + sellPercentage;
+            if (Math.abs(total - 100.0) > 2.0) { // Toleranz von 2%
+                LOGGER.fine("Prozentangaben ergeben nicht 100% für " + currencyPair + 
+                           " (Total: " + total + "%), normalisiere...");
+                // Normalisiere falls nötig
+                buyPercentage = (buyPercentage / total) * 100.0;
+                sellPercentage = (sellPercentage / total) * 100.0;
+            }
+            
+            // Erstelle CurrencyPairData
+            CurrencyPairData pairData = new CurrencyPairData(currencyPair, buyPercentage, sellPercentage, signal);
+            
+            // Validiere Konsistenz
+            if (!pairData.isDataConsistent()) {
+                LOGGER.fine("Daten inkonsistent für " + currencyPair + ", korrigiere...");
+                pairData.setSellPercentage(100.0 - buyPercentage);
+            }
+            
+            LOGGER.fine("Line-Element erfolgreich geparst: " + currencyPair + 
+                       " - Buy: " + String.format("%.1f", buyPercentage) + 
+                       "%, Sell: " + String.format("%.1f", sellPercentage) + 
+                       "%, Signal: " + signal);
+            
+            return pairData;
+            
+        } catch (Exception e) {
+            LOGGER.fine("Fehler beim Parsing eines Line-Elements: " + e.getMessage());
+            return null;
+        }
+    }
+    
+    /**
+     * Extrahiert Prozentangabe aus einem Ratio-Bar Element
+     */
+    private double extractPercentageFromRatioBar(Element ratioElement, String barSelector) {
+        try {
+            Elements barElements = ratioElement.select(barSelector);
+            if (barElements.isEmpty()) {
+                return -1;
+            }
+            
+            Element barElement = barElements.first();
+            
+            // Versuche Prozentangabe aus dem Text zu extrahieren
+            String barText = barElement.text().trim();
+            if (!barText.isEmpty()) {
+                Matcher matcher = PERCENTAGE_PATTERN.matcher(barText);
+                if (matcher.find()) {
+                    return Double.parseDouble(matcher.group(1));
+                }
+            }
+            
+            // Fallback: Versuche aus dem style-Attribut zu extrahieren
+            String style = barElement.attr("style");
+            if (!style.isEmpty()) {
+                Matcher styleMatcher = Pattern.compile("width:\\s*(\\d+(?:\\.\\d+)?)%").matcher(style);
+                if (styleMatcher.find()) {
+                    return Double.parseDouble(styleMatcher.group(1));
+                }
+            }
+            
+            return -1;
+            
+        } catch (Exception e) {
+            LOGGER.fine("Fehler beim Extrahieren der Prozentangabe aus " + barSelector + ": " + e.getMessage());
+            return -1;
+        }
+    }
+    
+    /**
+     * Extrahiert Trading-Signal aus einem .line Element
+     */
+    private TradingSignal extractTradingSignalFromLineElement(Element lineElement) {
+        try {
+            Elements signalElements = lineElement.select(".signal");
+            if (signalElements.isEmpty()) {
+                return TradingSignal.UNKNOWN;
+            }
+            
+            Element signalElement = signalElements.first();
+            String signalClass = signalElement.className().toLowerCase();
+            
+            if (signalClass.contains("buy")) {
+                return TradingSignal.BUY;
+            } else if (signalClass.contains("sell")) {
+                return TradingSignal.SELL;
+            } else if (signalClass.contains("neutral")) {
+                return TradingSignal.NEUTRAL;
+            } else {
+                // Fallback: Bestimme Signal basierend auf Text oder anderen Attributen
+                String signalText = signalElement.text().toLowerCase();
+                if (signalText.contains("buy")) {
+                    return TradingSignal.BUY;
+                } else if (signalText.contains("sell")) {
+                    return TradingSignal.SELL;
+                } else if (signalText.contains("neutral")) {
+                    return TradingSignal.NEUTRAL;
+                }
+                
+                return TradingSignal.UNKNOWN;
+            }
+            
+        } catch (Exception e) {
+            LOGGER.fine("Fehler beim Extrahieren des Trading-Signals: " + e.getMessage());
+            return TradingSignal.UNKNOWN;
+        }
+    }
+    
+    /**
+     * Versucht echte FXSSI CSS-Selektoren basierend auf Struktur-Analyse (Fallback)
      */
     private List<CurrencyPairData> tryFXSSISelectors(Document document) {
         List<CurrencyPairData> currencyData = new ArrayList<>();
         
-        LOGGER.info("Verwende echte FXSSI CSS-Selektoren...");
+        LOGGER.info("Verwende Fallback FXSSI CSS-Selektoren...");
         
-        // Echte FXSSI-Selektoren basierend auf Struktur-Analyse
+        // Erweiterte FXSSI-Selektoren basierend auf neuer Struktur
         String[] fxssiSelectors = {
-            "#thePairs .text-ratio",           // Spezifischer Pairs-Container mit Ratios
-            ".cur-rat-pairs .text-ratio",      // Pairs-Container mit Ratios
-            ".sentiment-ratios .text-ratio",   // Sentiment-Container mit Ratios
-            "#thePairs > div",                 // Direkte Kinder des Pairs-Containers
-            ".cur-rat-pairs > div",            // Direkte Kinder der Pairs
-            ".sentiment-ratios > div",         // Direkte Kinder der Sentiment-Ratios
-            "#thePairs",                       // Der Pairs-Container selbst
-            ".cur-rat-pairs",                  // Der Pairs-Container
-            ".sentiment-ratios"                // Der Sentiment-Container
+            ".sentiment-ratios .line",         // Neue Hauptstruktur
+            ".sentiment-ratios",               // Container
+            ".line",                           // Line-Elemente überall
+            "#thePairs .text-ratio",           // Ursprünglicher Selektor
+            ".cur-rat-pairs .text-ratio",      // Ursprünglicher Selektor
+            "#thePairs > div",                 // Direkte Kinder
+            ".cur-rat-pairs > div"             // Direkte Kinder
         };
         
         for (String selector : fxssiSelectors) {
             Elements elements = document.select(selector);
             if (!elements.isEmpty()) {
-                LOGGER.info("Verwende FXSSI-Selektor: " + selector + " (" + elements.size() + " Elemente gefunden)");
+                LOGGER.info("Verwende Fallback-Selektor: " + selector + " (" + elements.size() + " Elemente gefunden)");
                 
                 for (Element element : elements) {
                     CurrencyPairData pairData = parseFXSSIElement(element);
                     if (pairData != null) {
                         currencyData.add(pairData);
-                        LOGGER.fine("FXSSI-Element erfolgreich geparst: " + pairData.getCurrencyPair());
+                        LOGGER.fine("Fallback-Element erfolgreich geparst: " + pairData.getCurrencyPair());
                     }
                 }
                 
@@ -372,12 +560,12 @@ public class FXSSIScraper {
             }
         }
         
-        LOGGER.info("FXSSI-Selektoren: " + currencyData.size() + " Datensätze gefunden");
+        LOGGER.info("Fallback FXSSI-Selektoren: " + currencyData.size() + " Datensätze gefunden");
         return currencyData;
     }
     
     /**
-     * Parst ein FXSSI-spezifisches Element
+     * Parst ein FXSSI-spezifisches Element (ursprüngliche Methode)
      */
     private CurrencyPairData parseFXSSIElement(Element element) {
         try {
