@@ -8,6 +8,9 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.fxssi.extractor.model.CurrencyPairData;
+import com.fxssi.extractor.model.SignalChangeEvent;
+import com.fxssi.extractor.notification.EmailConfig;
+import com.fxssi.extractor.notification.EmailService;
 
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -39,9 +42,10 @@ import javafx.util.Callback;
  * Vollständige Java-GUI für das FXSSI Data Extractor Hauptfenster
  * Erstellt alle UI-Komponenten programmatisch ohne FXML mit konfigurierbarem Datenverzeichnis
  * Jetzt mit Signalwechsel-Spalte für Live-Wechsel-Erkennung UND historischen Daten Features
+ * ERWEITERT um E-Mail-Benachrichtigungen für Signalwechsel
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.5 (mit vollständiger historischer Daten Integration)
+ * @version 1.6 (mit vollständiger E-Mail-Integration)
  */
 public class MainWindowController {
     
@@ -67,15 +71,19 @@ public class MainWindowController {
     private Label lastUpdateLabel;
     private Label dataDirectoryLabel;
     private Label storageInfoLabel;
+    private Label emailStatusLabel; // NEU: E-Mail-Status
     private Button refreshButton;
-    private Button historicalDataButton; // NEU: Historische Daten Button
-    private Button debugButton; // NEU: Debug Button
+    private Button historicalDataButton;
+    private Button debugButton;
+    private Button emailConfigButton; // NEU: E-Mail-Konfigurations-Button
     private Spinner<Integer> refreshIntervalSpinner;
     private CheckBox autoRefreshCheckBox;
     
     // Services
     private DataRefreshManager refreshManager;
     private GuiDataService dataService;
+    private EmailConfig emailConfig; // NEU: E-Mail-Konfiguration
+    private EmailService emailService; // NEU: E-Mail-Service
     private String dataDirectory;
     
     /**
@@ -92,7 +100,7 @@ public class MainWindowController {
     public MainWindowController(String dataDirectory) {
         this.dataDirectory = validateDataDirectory(dataDirectory);
         LOGGER.info("MainWindowController erstellt mit Datenverzeichnis: " + this.dataDirectory);
-        LOGGER.info("Signalwechsel-Erkennung + Historische Daten aktiviert");
+        LOGGER.info("Signalwechsel-Erkennung + Historische Daten + E-Mail-Benachrichtigungen aktiviert");
     }
     
     /**
@@ -101,13 +109,16 @@ public class MainWindowController {
     public Scene createMainWindow(Stage primaryStage) {
         this.stage = primaryStage;
         
-        LOGGER.info("Erstelle Hauptfenster mit Signalwechsel + Historischen Daten Features...");
+        LOGGER.info("Erstelle Hauptfenster mit Signalwechsel + Historischen Daten + E-Mail Features...");
         LOGGER.info("Datenverzeichnis: " + dataDirectory);
         
         // Initialisiere Datenstrukturen
         tableData = FXCollections.observableArrayList();
         dataService = new GuiDataService(dataDirectory);
         refreshManager = new DataRefreshManager(this::refreshData);
+        
+        // NEU: Initialisiere E-Mail-Services
+        initializeEmailServices();
         
         // Erstelle Root-Layout
         root = new BorderPane();
@@ -123,14 +134,40 @@ public class MainWindowController {
         root.setCenter(centerArea);
         root.setBottom(bottomArea);
         
-        // Erstelle Scene mit noch breiterem Fenster für alle Features
-        scene = new Scene(root, 1600, 800); // Verbreitert für historische Daten Features
+        // Erstelle Scene mit erweiterter Breite für E-Mail-Features
+        scene = new Scene(root, 1700, 800); // Noch breiter für E-Mail-Button
         
         // Lade CSS (falls vorhanden)
         loadStylesheets();
         
-        LOGGER.info("Hauptfenster erfolgreich erstellt (1600x800) mit allen Features");
+        LOGGER.info("Hauptfenster erfolgreich erstellt (1700x800) mit allen Features inkl. E-Mail");
         return scene;
+    }
+    
+    /**
+     * NEU: Initialisiert die E-Mail-Services
+     */
+    private void initializeEmailServices() {
+        try {
+            LOGGER.info("Initialisiere E-Mail-Services...");
+            
+            // Erstelle E-Mail-Konfiguration
+            emailConfig = new EmailConfig(dataDirectory);
+            emailConfig.loadConfig();
+            
+            // Erstelle E-Mail-Service
+            emailService = new EmailService(emailConfig);
+            
+            LOGGER.info("E-Mail-Services initialisiert - Status: " + 
+                (emailConfig.isEmailEnabled() ? "Aktiviert" : "Deaktiviert"));
+            
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Fehler beim Initialisieren der E-Mail-Services: " + e.getMessage(), e);
+            
+            // Fallback: Deaktivierte E-Mail-Konfiguration
+            emailConfig = new EmailConfig(dataDirectory);
+            emailService = new EmailService(emailConfig);
+        }
     }
     
     /**
@@ -161,7 +198,7 @@ public class MainWindowController {
         titleBar.setPadding(new Insets(10, 20, 10, 20));
         titleBar.getStyleClass().add("title-bar");
         
-        Label titleLabel = new Label("FXSSI Live Sentiment Monitor mit Signalwechsel + Historischen Daten");
+        Label titleLabel = new Label("FXSSI Live Sentiment Monitor mit Signalwechsel + E-Mail-Benachrichtigungen");
         titleLabel.setFont(Font.font("System", FontWeight.BOLD, 22));
         titleLabel.getStyleClass().add("title-label");
         
@@ -170,7 +207,7 @@ public class MainWindowController {
     }
     
     /**
-     * Erstellt die Toolbar mit Steuerelementen + NEUER historische Daten Button
+     * Erstellt die Toolbar mit Steuerelementen + E-Mail-Konfigurations-Button
      */
     private HBox createToolbar() {
         HBox toolbar = new HBox(15);
@@ -184,13 +221,19 @@ public class MainWindowController {
         refreshButton.getStyleClass().add("refresh-button");
         refreshButton.setOnAction(event -> refreshData());
         
-        // *** NEU: Historische Daten Button ***
+        // Historische Daten Button
         historicalDataButton = new Button("📊 Historische Daten");
         historicalDataButton.setFont(Font.font(12));
         historicalDataButton.getStyleClass().add("historical-data-button");
         historicalDataButton.setOnAction(event -> showHistoricalDataForSelectedPair());
         
-        // *** NEU: Debug Button (temporär) ***
+        // *** NEU: E-Mail-Konfigurations-Button ***
+        emailConfigButton = new Button("📧 E-Mail-Konfiguration");
+        emailConfigButton.setFont(Font.font(12));
+        emailConfigButton.getStyleClass().add("email-config-button");
+        emailConfigButton.setOnAction(event -> openEmailConfiguration());
+        
+        // Debug Button (temporär)
         debugButton = new Button("🔧 Debug CSV");
         debugButton.setFont(Font.font(10));
         debugButton.getStyleClass().add("debug-button");
@@ -213,7 +256,7 @@ public class MainWindowController {
         autoRefreshCheckBox.setOnAction(event -> {
             if (autoRefreshCheckBox.isSelected()) {
                 refreshManager.startAutoRefresh(refreshIntervalSpinner.getValue());
-                LOGGER.info("Auto-Refresh aktiviert - Signalwechsel werden automatisch erkannt");
+                LOGGER.info("Auto-Refresh aktiviert - Signalwechsel werden automatisch erkannt + E-Mails versendet");
             } else {
                 refreshManager.stopAutoRefresh();
                 LOGGER.info("Auto-Refresh deaktiviert");
@@ -232,7 +275,7 @@ public class MainWindowController {
         refreshIntervalSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
             if (autoRefreshCheckBox.isSelected()) {
                 refreshManager.updateRefreshInterval(newVal);
-                LOGGER.info("Refresh-Intervall geändert auf " + newVal + " Minuten (mit Signalwechsel-Erkennung)");
+                LOGGER.info("Refresh-Intervall geändert auf " + newVal + " Minuten (mit Signalwechsel + E-Mail)");
             }
         });
         
@@ -243,17 +286,46 @@ public class MainWindowController {
         // Status-Bereich
         VBox statusArea = createStatusArea();
         
-        // *** ERWEITERTE Toolbar mit allen neuen Buttons ***
+        // *** ERWEITERTE Toolbar mit E-Mail-Button ***
         toolbar.getChildren().addAll(
-            refreshButton, historicalDataButton, debugButton, separator1, autoRefreshLabel, autoRefreshCheckBox,
-            intervalLabel, refreshIntervalSpinner, spacer, statusArea
+            refreshButton, historicalDataButton, emailConfigButton, debugButton, separator1, 
+            autoRefreshLabel, autoRefreshCheckBox, intervalLabel, refreshIntervalSpinner, 
+            spacer, statusArea
         );
         
         return toolbar;
     }
     
     /**
-     * Erstellt den Status-Bereich mit erweiterten Informationen
+     * *** NEU: Öffnet das E-Mail-Konfigurationsfenster ***
+     */
+    private void openEmailConfiguration() {
+        try {
+            LOGGER.info("Öffne E-Mail-Konfigurationsfenster...");
+            
+            // Erstelle und zeige das E-Mail-Konfigurationsfenster
+            EmailConfigWindow emailConfigWindow = new EmailConfigWindow(stage, dataDirectory);
+            emailConfigWindow.show();
+            
+            // Optional: Update E-Mail-Services nach Konfiguration
+            // (Das EmailConfigWindow macht das automatisch)
+            
+        } catch (Exception e) {
+            LOGGER.severe("Fehler beim Öffnen der E-Mail-Konfiguration: " + e.getMessage());
+            
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Fehler");
+            alert.setHeaderText("E-Mail-Konfiguration konnte nicht geöffnet werden");
+            alert.setContentText("Fehler: " + e.getMessage() + 
+                "\n\nMögliche Ursachen:" +
+                "\n• Konfigurationsverzeichnis nicht zugänglich" +
+                "\n• E-Mail-Services nicht initialisiert");
+            alert.showAndWait();
+        }
+    }
+    
+    /**
+     * Erstellt den Status-Bereich mit erweiterten Informationen inkl. E-Mail-Status
      */
     private VBox createStatusArea() {
         VBox statusArea = new VBox();
@@ -277,7 +349,12 @@ public class MainWindowController {
         storageInfoLabel.setFont(Font.font(9));
         storageInfoLabel.getStyleClass().add("storage-info-label");
         
-        statusArea.getChildren().addAll(statusLabel, lastUpdateLabel, dataDirectoryLabel, storageInfoLabel);
+        // *** NEU: E-Mail-Status-Label ***
+        emailStatusLabel = new Label("E-Mail: " + (emailConfig != null && emailConfig.isEmailEnabled() ? "✅ Aktiviert" : "❌ Deaktiviert"));
+        emailStatusLabel.setFont(Font.font(9));
+        emailStatusLabel.getStyleClass().add("email-status-label");
+        
+        statusArea.getChildren().addAll(statusLabel, lastUpdateLabel, dataDirectoryLabel, storageInfoLabel, emailStatusLabel);
         return statusArea;
     }
     
@@ -300,20 +377,20 @@ public class MainWindowController {
     }
     
     /**
-     * Erstellt den Tabellen-Header mit Hinweis auf historische Daten
+     * Erstellt den Tabellen-Header mit Hinweis auf E-Mail-Benachrichtigungen
      */
     private HBox createTableHeader() {
         HBox headerArea = new HBox(10);
         headerArea.setAlignment(Pos.CENTER_LEFT);
         
-        Label sectionHeader = new Label("Live Currency Sentiment Data mit Signalwechsel + Historischen Daten");
+        Label sectionHeader = new Label("Live Currency Sentiment Data mit Signalwechsel + E-Mail-Benachrichtigungen");
         sectionHeader.setFont(Font.font("System", FontWeight.BOLD, 16));
         sectionHeader.getStyleClass().add("section-header");
         
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        Label sectionDescription = new Label("🔄 Klicken Sie auf Wechsel-Icons für Details | 📊 Doppelklick für historische Daten");
+        Label sectionDescription = new Label("🔄 Klicken Sie auf Wechsel-Icons für Details | 📊 Doppelklick für historische Daten | 📧 E-Mail-Benachrichtigungen");
         sectionDescription.setFont(Font.font(12));
         sectionDescription.getStyleClass().add("section-description");
         
@@ -328,7 +405,7 @@ public class MainWindowController {
         TableView<CurrencyPairTableRow> table = new TableView<>();
         table.getStyleClass().add("currency-table");
         
-        // *** NEU: Aktiviere Selektion für historische Daten ***
+        // Aktiviere Selektion für historische Daten
         table.getSelectionModel().setSelectionMode(javafx.scene.control.SelectionMode.SINGLE);
         
         // Symbol-Spalte
@@ -339,12 +416,12 @@ public class MainWindowController {
         symbolColumn.setResizable(false);
         symbolColumn.getStyleClass().add("symbol-column");
         
-        // Ratio-Spalte - angepasst für neue Spalte
+        // Ratio-Spalte - angepasst für mehr Spalten
         ratioColumn = new TableColumn<>("Ratio");
         ratioColumn.setCellValueFactory(cellData -> 
             new javafx.beans.property.SimpleObjectProperty<>(cellData.getValue()));
         ratioColumn.setCellFactory(new RatioBarCellFactory());
-        ratioColumn.setPrefWidth(400); // Angepasst für mehr Spalten
+        ratioColumn.setPrefWidth(380); // Angepasst für E-Mail-Features
         ratioColumn.getStyleClass().add("ratio-column");
         
         // Signal-Spalte
@@ -371,7 +448,7 @@ public class MainWindowController {
         // Tabellen-Konfiguration
         table.setItems(tableData);
         
-        // *** NEU: Row-Factory mit Selektion für historische Daten ***
+        // Row-Factory mit Selektion für historische Daten
         table.setRowFactory(tv -> {
             TableRow<CurrencyPairTableRow> row = new TableRow<>();
             row.getStyleClass().add("currency-table-row");
@@ -393,12 +470,12 @@ public class MainWindowController {
         // Spaltengrößen-Policy
         table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
         
-        LOGGER.info("Tabelle erstellt mit Selektion für historische Daten + 4 Spalten");
+        LOGGER.info("Tabelle erstellt mit Selektion für historische Daten + E-Mail-Features + 4 Spalten");
         return table;
     }
     
     /**
-     * Erstellt den Placeholder für leere Tabelle mit allen Features
+     * Erstellt den Placeholder für leere Tabelle mit allen Features inkl. E-Mail
      */
     private VBox createTablePlaceholder() {
         VBox placeholder = new VBox(10);
@@ -428,13 +505,18 @@ public class MainWindowController {
         historicalHint.setFont(Font.font(10));
         historicalHint.getStyleClass().add("placeholder-hint-small");
         
+        // *** NEU: E-Mail-Hinweis ***
+        Label emailHint = new Label("📧 E-Mail-Benachrichtigungen: Konfiguration über E-Mail-Button");
+        emailHint.setFont(Font.font(10));
+        emailHint.getStyleClass().add("placeholder-hint-small");
+        
         placeholder.getChildren().addAll(placeholderText, placeholderHint, dataDirectoryHint, 
-                                       storageHint, changeHint, historicalHint);
+                                       storageHint, changeHint, historicalHint, emailHint);
         return placeholder;
     }
     
     /**
-     * Erstellt den unteren Bereich (Status-Leiste) mit erweiterten Informationen
+     * Erstellt den unteren Bereich (Status-Leiste) mit E-Mail-Informationen
      */
     private HBox createBottomArea() {
         HBox bottomArea = new HBox(20);
@@ -442,14 +524,14 @@ public class MainWindowController {
         bottomArea.setPadding(new Insets(5, 20, 5, 20));
         bottomArea.getStyleClass().add("status-bar");
         
-        Label appInfo = new Label("FXSSI Data Extractor v1.5");
+        Label appInfo = new Label("FXSSI Data Extractor v1.6");
         appInfo.setFont(Font.font(10));
         appInfo.getStyleClass().add("app-info");
         
         Separator separator1 = new Separator();
         separator1.setOrientation(javafx.geometry.Orientation.VERTICAL);
         
-        Label appDescription = new Label("Sentiment + Signalwechsel + Historische Daten");
+        Label appDescription = new Label("Sentiment + Signalwechsel + Historische Daten + E-Mail-Benachrichtigungen");
         appDescription.setFont(Font.font(10));
         appDescription.getStyleClass().add("app-description");
         
@@ -464,14 +546,14 @@ public class MainWindowController {
         Separator separator3 = new Separator();
         separator3.setOrientation(javafx.geometry.Orientation.VERTICAL);
         
-        Label storageInfo = new Label("Speicher: Täglich + Währungspaare + Signalwechsel + Historisch");
+        Label storageInfo = new Label("Speicher: Täglich + Währungspaare + Signalwechsel + Historisch + E-Mail-Config");
         storageInfo.setFont(Font.font(10));
         storageInfo.getStyleClass().add("storage-info");
         
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        Label dataSource = new Label("Live + Historische Daten von FXSSI.com");
+        Label dataSource = new Label("Live + Historische Daten von FXSSI.com + E-Mail-Benachrichtigungen");
         dataSource.setFont(Font.font(10));
         dataSource.getStyleClass().add("data-source");
         
@@ -484,7 +566,7 @@ public class MainWindowController {
     }
     
     /**
-     * *** NEUE METHODE: Zeigt historische Daten für das ausgewählte Währungspaar ***
+     * Zeigt historische Daten für das ausgewählte Währungspaar
      */
     private void showHistoricalDataForSelectedPair() {
         CurrencyPairTableRow selectedItem = currencyTable.getSelectionModel().getSelectedItem();
@@ -504,7 +586,7 @@ public class MainWindowController {
     }
     
     /**
-     * *** NEUE METHODE: Zeigt historische Daten für ein bestimmtes Währungspaar ***
+     * Zeigt historische Daten für ein bestimmtes Währungspaar
      */
     private void showHistoricalDataForPair(String currencyPair) {
         try {
@@ -537,7 +619,7 @@ public class MainWindowController {
     }
     
     /**
-     * *** NEUE METHODE: Debug-Methode zum Testen der CSV-Datenladung ***
+     * Debug-Methode zum Testen der CSV-Datenladung
      */
     private void debugHistoricalDataLoading() {
         LOGGER.info("=== DEBUG: Teste historische Datenladung ===");
@@ -629,14 +711,17 @@ public class MainWindowController {
             // Starte Auto-Refresh falls aktiviert
             if (autoRefreshCheckBox.isSelected()) {
                 refreshManager.startAutoRefresh(refreshIntervalSpinner.getValue());
-                LOGGER.info("Auto-Refresh gestartet mit Signalwechsel-Erkennung alle " + refreshIntervalSpinner.getValue() + " Minuten");
+                LOGGER.info("Auto-Refresh gestartet mit Signalwechsel + E-Mail-Erkennung alle " + refreshIntervalSpinner.getValue() + " Minuten");
             }
             
             LOGGER.info("Datenservice gestartet mit Datenverzeichnis: " + dataDirectory);
-            LOGGER.info("Alle Features aktiviert: Live-Daten + Signalwechsel + Historische Daten");
+            LOGGER.info("Alle Features aktiviert: Live-Daten + Signalwechsel + Historische Daten + E-Mail-Benachrichtigungen");
             
             // Zeige initiale Statistiken
             updateStorageStatistics();
+            
+            // Update E-Mail-Status
+            updateEmailStatus();
             
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Fehler beim Starten des Datenservice: " + e.getMessage(), e);
@@ -645,7 +730,29 @@ public class MainWindowController {
     }
     
     /**
-     * Aktualisiert die Daten in der Tabelle mit Signalwechsel-Erkennung
+     * *** NEU: Aktualisiert die E-Mail-Status-Anzeige ***
+     */
+    private void updateEmailStatus() {
+        try {
+            if (emailConfig != null) {
+                String statusText = "E-Mail: " + (emailConfig.isEmailEnabled() ? "✅ Aktiviert" : "❌ Deaktiviert");
+                if (emailConfig.isEmailEnabled()) {
+                    statusText += " (" + emailConfig.getToEmail() + ")";
+                }
+                
+                Platform.runLater(() -> {
+                    emailStatusLabel.setText(statusText);
+                });
+                
+                LOGGER.fine("E-Mail-Status aktualisiert: " + statusText);
+            }
+        } catch (Exception e) {
+            LOGGER.fine("Konnte E-Mail-Status nicht aktualisieren: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * Aktualisiert die Daten in der Tabelle mit Signalwechsel-Erkennung UND E-Mail-Versendung
      * WICHTIG: Diese Methode wird bei JEDEM Refresh (manuell + automatisch) aufgerufen
      */
     private void refreshData() {
@@ -653,6 +760,7 @@ public class MainWindowController {
             updateStatus("Lade Daten und erkenne Signalwechsel...");
             refreshButton.setDisable(true);
             if (historicalDataButton != null) historicalDataButton.setDisable(true);
+            if (emailConfigButton != null) emailConfigButton.setDisable(true);
         });
         
         // Lade Daten asynchron
@@ -661,22 +769,29 @@ public class MainWindowController {
                 // WICHTIG: Diese Methode garantiert Signalwechsel-Erkennung
                 List<CurrencyPairData> data = dataService.forceDataRefresh();
                 
+                // *** NEU: Signalwechsel-Benachrichtigungen per E-Mail versenden ***
+                sendSignalChangeNotificationsIfEnabled();
+                
                 Platform.runLater(() -> {
                     updateTableData(data);
-                    updateStatus("Daten aktualisiert (" + data.size() + " Währungspaare) - Signalwechsel erkannt");
+                    updateStatus("Daten aktualisiert (" + data.size() + " Währungspaare) - Signalwechsel erkannt + E-Mail geprüft");
                     lastUpdateLabel.setText("Letzte Aktualisierung: " + 
-                        java.time.LocalTime.now().format(TIME_FORMATTER) + " (mit Signalwechsel-Check)");
+                        java.time.LocalTime.now().format(TIME_FORMATTER) + " (mit Signalwechsel + E-Mail-Check)");
                     refreshButton.setDisable(false);
                     if (historicalDataButton != null) historicalDataButton.setDisable(false);
+                    if (emailConfigButton != null) emailConfigButton.setDisable(false);
                     
                     // Aktualisiere Speicher-Statistiken
                     updateStorageStatistics();
+                    
+                    // Aktualisiere E-Mail-Status
+                    updateEmailStatus();
                     
                     // Aktualisiere Signalwechsel-Zellen
                     refreshSignalChangeCells();
                 });
                 
-                LOGGER.info("GUI-Refresh abgeschlossen: " + data.size() + " Datensätze + Signalwechsel-Erkennung");
+                LOGGER.info("GUI-Refresh abgeschlossen: " + data.size() + " Datensätze + Signalwechsel + E-Mail-Check");
                 
             } catch (Exception e) {
                 LOGGER.log(Level.WARNING, "Fehler beim Laden der Daten: " + e.getMessage(), e);
@@ -685,9 +800,70 @@ public class MainWindowController {
                     updateStatus("Fehler beim Laden der Daten: " + e.getMessage());
                     refreshButton.setDisable(false);
                     if (historicalDataButton != null) historicalDataButton.setDisable(false);
+                    if (emailConfigButton != null) emailConfigButton.setDisable(false);
                 });
             }
         }).start();
+    }
+    
+    /**
+     * *** NEU: Sendet E-Mail-Benachrichtigungen für erkannte Signalwechsel ***
+     */
+    private void sendSignalChangeNotificationsIfEnabled() {
+        try {
+            // Prüfe ob E-Mail-Benachrichtigungen aktiviert sind
+            if (emailConfig == null || !emailConfig.isEmailEnabled()) {
+                LOGGER.fine("E-Mail-Benachrichtigungen deaktiviert - keine E-Mails versenden");
+                return;
+            }
+            
+            // Hole die aktuellsten Signalwechsel (z.B. letzte 2 Stunden)
+            List<SignalChangeEvent> recentChanges = getRecentSignalChangesFromAllPairs(2);
+            
+            if (recentChanges.isEmpty()) {
+                LOGGER.fine("Keine aktuellen Signalwechsel für E-Mail-Benachrichtigung gefunden");
+                return;
+            }
+            
+            LOGGER.info("Prüfe " + recentChanges.size() + " aktuelle Signalwechsel für E-Mail-Versendung...");
+            
+            // Sende E-Mail-Benachrichtigung
+            EmailService.EmailSendResult result = emailService.sendSignalChangeNotification(recentChanges);
+            
+            if (result.isSuccess()) {
+                LOGGER.info("📧 E-Mail-Benachrichtigung erfolgreich gesendet: " + result.getMessage());
+            } else {
+                LOGGER.warning("❌ E-Mail-Benachrichtigung fehlgeschlagen: " + result.getMessage());
+            }
+            
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Fehler beim Versenden von E-Mail-Benachrichtigungen: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * *** NEU: Holt aktuelle Signalwechsel von allen Währungspaaren ***
+     */
+    private List<SignalChangeEvent> getRecentSignalChangesFromAllPairs(int hours) {
+        List<SignalChangeEvent> allRecentChanges = new ArrayList<>();
+        
+        try {
+            Set<String> availablePairs = dataService.getAvailableCurrencyPairs();
+            
+            for (String currencyPair : availablePairs) {
+                List<SignalChangeEvent> pairChanges = dataService.getSignalChangeHistoryManager()
+                    .getSignalChangesWithinHours(currencyPair, hours);
+                allRecentChanges.addAll(pairChanges);
+            }
+            
+            // Sortiere nach Zeit (neueste zuerst)
+            allRecentChanges.sort((a, b) -> b.getChangeTime().compareTo(a.getChangeTime()));
+            
+        } catch (Exception e) {
+            LOGGER.warning("Fehler beim Abrufen aktueller Signalwechsel: " + e.getMessage());
+        }
+        
+        return allRecentChanges;
     }
     
     /**
@@ -706,7 +882,7 @@ public class MainWindowController {
             tableData.add(row);
         }
         
-        LOGGER.fine("Tabelle mit " + data.size() + " Einträgen aktualisiert (inkl. alle Features)");
+        LOGGER.fine("Tabelle mit " + data.size() + " Einträgen aktualisiert (inkl. alle Features + E-Mail)");
     }
     
     /**
@@ -733,7 +909,7 @@ public class MainWindowController {
             GuiDataService.ExtendedDataStatistics stats = dataService.getExtendedDataStatistics();
             Set<String> availablePairs = dataService.getAvailableCurrencyPairs();
             
-            String storageText = String.format("Speicherung: %d tägl. Dateien, %d Währungspaare, Signalwechsel + Historisch aktiv", 
+            String storageText = String.format("Speicherung: %d tägl. Dateien, %d Währungspaare, Signalwechsel + Historisch + E-Mail aktiv", 
                 stats.getTotalFiles(), availablePairs.size());
             
             Platform.runLater(() -> {
@@ -805,6 +981,20 @@ public class MainWindowController {
     }
     
     /**
+     * *** NEU: Gibt die E-Mail-Konfiguration zurück ***
+     */
+    public EmailConfig getEmailConfig() {
+        return emailConfig;
+    }
+    
+    /**
+     * *** NEU: Gibt den E-Mail-Service zurück ***
+     */
+    public EmailService getEmailService() {
+        return emailService;
+    }
+    
+    /**
      * Setzt die Stage-Referenz
      */
     public void setStage(Stage stage) {
@@ -824,6 +1014,11 @@ public class MainWindowController {
             
             if (dataService != null) {
                 dataService.shutdown();
+            }
+            
+            // *** NEU: Fahre E-Mail-Service herunter ***
+            if (emailService != null) {
+                emailService.shutdown();
             }
             
             LOGGER.info("MainWindowController heruntergefahren");
