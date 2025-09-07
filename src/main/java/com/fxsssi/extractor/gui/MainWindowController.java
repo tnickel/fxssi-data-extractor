@@ -732,16 +732,25 @@ public class MainWindowController {
     /**
      * *** NEU: Aktualisiert die E-Mail-Status-Anzeige ***
      */
+    /**
+     * *** KORRIGIERT: Aktualisiert die E-Mail-Status-Anzeige mit final Variable ***
+     */
     private void updateEmailStatus() {
         try {
             if (emailConfig != null) {
-                String statusText = "E-Mail: " + (emailConfig.isEmailEnabled() ? "✅ Aktiviert" : "❌ Deaktiviert");
+                // *** FIX: Erstelle finale statusText Variable ***
+                final String statusText;
                 if (emailConfig.isEmailEnabled()) {
-                    statusText += " (" + emailConfig.getToEmail() + ")";
+                    statusText = "E-Mail: ✅ Aktiviert (" + emailConfig.getToEmail() + ")";
+                } else {
+                    statusText = "E-Mail: ❌ Deaktiviert";
                 }
                 
                 Platform.runLater(() -> {
-                    emailStatusLabel.setText(statusText);
+                    // *** FIX: Null-Check hinzugefügt ***
+                    if (emailStatusLabel != null) {
+                        emailStatusLabel.setText(statusText);
+                    }
                 });
                 
                 LOGGER.fine("E-Mail-Status aktualisiert: " + statusText);
@@ -775,8 +784,13 @@ public class MainWindowController {
                 Platform.runLater(() -> {
                     updateTableData(data);
                     updateStatus("Daten aktualisiert (" + data.size() + " Währungspaare) - Signalwechsel erkannt + E-Mail geprüft");
-                    lastUpdateLabel.setText("Letzte Aktualisierung: " + 
-                        java.time.LocalTime.now().format(TIME_FORMATTER) + " (mit Signalwechsel + E-Mail-Check)");
+                    
+                    // *** FIX: Null-Check für lastUpdateLabel hinzugefügt ***
+                    if (lastUpdateLabel != null) {
+                        lastUpdateLabel.setText("Letzte Aktualisierung: " + 
+                            java.time.LocalTime.now().format(TIME_FORMATTER) + " (mit Signalwechsel + E-Mail-Check)");
+                    }
+                    
                     refreshButton.setDisable(false);
                     if (historicalDataButton != null) historicalDataButton.setDisable(false);
                     if (emailConfigButton != null) emailConfigButton.setDisable(false);
@@ -913,7 +927,10 @@ public class MainWindowController {
                 stats.getTotalFiles(), availablePairs.size());
             
             Platform.runLater(() -> {
-                storageInfoLabel.setText(storageText);
+                // *** FIX: Null-Check hinzugefügt ***
+                if (storageInfoLabel != null) {
+                    storageInfoLabel.setText(storageText);
+                }
             });
             
             LOGGER.fine("Speicher-Statistiken aktualisiert: " + stats.toString());
