@@ -4,6 +4,9 @@ import com.fxssi.extractor.model.SignalChangeEvent;
 import com.fxssi.extractor.storage.SignalChangeHistoryManager;
 import com.fxsssi.extractor.gui.MainWindowController.CurrencyPairTableRow;
 
+import javafx.animation.Animation;
+import javafx.animation.PauseTransition;
+import javafx.animation.ScaleTransition;
 import javafx.geometry.Pos;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
@@ -23,7 +26,7 @@ import java.util.logging.Logger;
  * Zeigt ein Icon mit Aktualitäts-Information und öffnet bei Klick das Detail-Popup
  * 
  * @author Generated for FXSSI Signal Change Detection
- * @version 1.0
+ * @version 2.0 - Verbesserte visuelle Hierarchie
  */
 public class SignalChangeTableCell extends TableCell<CurrencyPairTableRow, CurrencyPairTableRow> {
     
@@ -113,40 +116,88 @@ public class SignalChangeTableCell extends TableCell<CurrencyPairTableRow, Curre
         changeButton.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-padding: 2; -fx-text-fill: #cccccc;");
         timeLabel.setText("Kein Wechsel");
         
+        // Normale Größe wiederherstellen
+        changeButton.setPrefSize(30, 30);
+        changeButton.setMaxSize(30, 30);
+        changeButton.setMinSize(30, 30);
+        
         Tooltip tooltip = new Tooltip("Keine Signalwechsel erkannt\nKlicken für Details");
         changeButton.setTooltip(tooltip);
     }
     
     /**
-     * Zeigt den Zustand mit Signalwechsel
+     * Zeigt den Zustand mit Signalwechsel - VERBESSERTE VERSION mit deutlicher visueller Hierarchie
      */
     private void showChangeState(SignalChangeEvent change) {
         // Icon basierend auf Aktualität und Wichtigkeit
         String icon = change.getCombinedIcon();
         changeButton.setText(icon);
         
-        // Styling basierend auf Aktualität
-        String buttonStyle = "-fx-background-color: transparent; -fx-border-color: transparent; -fx-padding: 2;";
+        // Styling basierend auf Aktualität - DEUTLICH VERBESSERT
         SignalChangeEvent.SignalChangeActuality actuality = change.getActuality();
         
+        // Basis-Style
+        String buttonStyle = "-fx-border-color: transparent; -fx-padding: 5; -fx-border-radius: 8; -fx-background-radius: 8;";
+        String timeLabelStyle = "";
+        
         switch (actuality) {
-            case VERY_RECENT:
-                buttonStyle += " -fx-text-fill: #d32f2f;"; // Kräftiges Rot
+            case VERY_RECENT: // Heute - letzte 4 Stunden
+                // SEHR AUFFÄLLIG: Leuchtend rote Hintergrundfarbe mit weißer Schrift
+                buttonStyle += " -fx-background-color: #ff1744; -fx-text-fill: white; -fx-font-weight: bold;";
+                timeLabelStyle = "-fx-text-fill: #ff1744; -fx-font-weight: bold; -fx-font-size: 10px;";
+                
+                // Button größer machen für maximale Aufmerksamkeit
+                changeButton.setPrefSize(35, 35);
+                changeButton.setMaxSize(35, 35);
+                changeButton.setMinSize(35, 35);
+                
+                // Pulsierender Effekt für heute
+                addPulsingEffect();
                 break;
-            case RECENT:
-                buttonStyle += " -fx-text-fill: #f57c00;"; // Orange
+                
+            case RECENT: // Heute - älter als 4 Stunden
+                // DEUTLICH: Orangener Hintergrund mit weißer Schrift
+                buttonStyle += " -fx-background-color: #ff6f00; -fx-text-fill: white; -fx-font-weight: bold;";
+                timeLabelStyle = "-fx-text-fill: #ff6f00; -fx-font-weight: bold; -fx-font-size: 10px;";
+                
+                changeButton.setPrefSize(33, 33);
+                changeButton.setMaxSize(33, 33);
+                changeButton.setMinSize(33, 33);
                 break;
-            case THIS_WEEK:
-                buttonStyle += " -fx-text-fill: #388e3c;"; // Grün
+                
+            case THIS_WEEK: // Diese Woche
+                // SICHTBAR: Grünlicher Hintergrund
+                buttonStyle += " -fx-background-color: #4caf50; -fx-text-fill: white; -fx-font-weight: normal;";
+                timeLabelStyle = "-fx-text-fill: #4caf50; -fx-font-weight: normal; -fx-font-size: 9px;";
+                
+                changeButton.setPrefSize(30, 30);
+                changeButton.setMaxSize(30, 30);
+                changeButton.setMinSize(30, 30);
                 break;
-            default:
-                buttonStyle += " -fx-text-fill: #757575;"; // Grau
+                
+            default: // Älter
+                // DEZENT: Grauer Hintergrund
+                buttonStyle += " -fx-background-color: #9e9e9e; -fx-text-fill: white; -fx-font-weight: normal;";
+                timeLabelStyle = "-fx-text-fill: #757575; -fx-font-weight: normal; -fx-font-size: 9px;";
+                
+                changeButton.setPrefSize(28, 28);
+                changeButton.setMaxSize(28, 28);
+                changeButton.setMinSize(28, 28);
                 break;
+        }
+        
+        // Zusätzliche Hervorhebung für direkte Umkehrungen
+        if (change.isDirectReversal()) {
+            buttonStyle += " -fx-border-color: #ffeb3b; -fx-border-width: 2;";
+            // Goldener Rand für direkte Umkehrungen
         }
         
         changeButton.setStyle(buttonStyle);
         
-        // Zeit-Label
+        // Zeit-Label stylen
+        timeLabel.setStyle(timeLabelStyle);
+        
+        // Zeit-Label Text
         String timeText = formatChangeTime(change);
         timeLabel.setText(timeText);
         
@@ -161,12 +212,100 @@ public class SignalChangeTableCell extends TableCell<CurrencyPairTableRow, Curre
     }
     
     /**
+     * Fügt einen pulsierenden Effekt für sehr aktuelle Änderungen hinzu
+     */
+    private void addPulsingEffect() {
+        // Entferne eventuelle vorherige Animationen
+        changeButton.getTransforms().clear();
+        
+        // Erstelle pulsierenden Effekt
+        ScaleTransition pulse = new ScaleTransition(
+            javafx.util.Duration.millis(1000), changeButton);
+        pulse.setFromX(1.0);
+        pulse.setFromY(1.0);
+        pulse.setToX(1.1);
+        pulse.setToY(1.1);
+        pulse.setCycleCount(Animation.INDEFINITE);
+        pulse.setAutoReverse(true);
+        
+        pulse.play();
+        
+        // Animation nach 30 Sekunden stoppen um nicht zu nervig zu sein
+        PauseTransition stopPulse = new PauseTransition(
+            javafx.util.Duration.seconds(30));
+        stopPulse.setOnFinished(e -> pulse.stop());
+        stopPulse.play();
+    }
+    
+    /**
+     * Verbesserte Hover-Effekte mit Aktualitäts-spezifischen Reaktionen
+     */
+    private void addHoverEffects(SignalChangeEvent change) {
+        SignalChangeEvent.SignalChangeActuality actuality = change.getActuality();
+        
+        changeButton.setOnMouseEntered(event -> {
+            // Verschiedene Hover-Effekte je nach Aktualität
+            double scaleIncrease = 1.0;
+            String hoverColor = "";
+            
+            switch (actuality) {
+                case VERY_RECENT:
+                    scaleIncrease = 1.3; // Stärkere Vergrößerung für heute
+                    hoverColor = "#d50000"; // Noch kräftigeres Rot
+                    break;
+                case RECENT:
+                    scaleIncrease = 1.25;
+                    hoverColor = "#e65100"; // Kräftigeres Orange
+                    break;
+                case THIS_WEEK:
+                    scaleIncrease = 1.2;
+                    hoverColor = "#388e3c"; // Kräftigeres Grün
+                    break;
+                default:
+                    scaleIncrease = 1.15;
+                    hoverColor = "#616161"; // Kräftigeres Grau
+                    break;
+            }
+            
+            // Vergrößerung
+            changeButton.setScaleX(scaleIncrease);
+            changeButton.setScaleY(scaleIncrease);
+            
+            // Farbe ändern beim Hover
+            String currentStyle = changeButton.getStyle();
+            String hoverStyle = currentStyle.replaceAll("-fx-background-color: [^;]+", 
+                                                       "-fx-background-color: " + hoverColor);
+            changeButton.setStyle(hoverStyle + " -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.3), 5, 0, 0, 2);");
+            
+            // Cursor ändern
+            changeButton.getScene().setCursor(javafx.scene.Cursor.HAND);
+        });
+        
+        changeButton.setOnMouseExited(event -> {
+            // Zurück zur normalen Größe
+            changeButton.setScaleX(1.0);
+            changeButton.setScaleY(1.0);
+            
+            // Original-Styling wiederherstellen
+            showChangeState(change);
+            
+            // Cursor zurücksetzen
+            changeButton.getScene().setCursor(javafx.scene.Cursor.DEFAULT);
+        });
+    }
+    
+    /**
      * Zeigt den Fehlerzustand
      */
     private void showErrorState() {
         changeButton.setText("❌");
         changeButton.setStyle("-fx-background-color: transparent; -fx-border-color: transparent; -fx-padding: 2; -fx-text-fill: #d32f2f;");
         timeLabel.setText("Fehler");
+        
+        // Normale Größe wiederherstellen
+        changeButton.setPrefSize(30, 30);
+        changeButton.setMaxSize(30, 30);
+        changeButton.setMinSize(30, 30);
         
         Tooltip tooltip = new Tooltip("Fehler beim Laden der Signalwechsel");
         changeButton.setTooltip(tooltip);
@@ -197,7 +336,7 @@ public class SignalChangeTableCell extends TableCell<CurrencyPairTableRow, Curre
         StringBuilder tooltip = new StringBuilder();
         
         tooltip.append("🔄 SIGNALWECHSEL ERKANNT\n");
-        tooltip.append("═══════════════════════════\n\n");
+        tooltip.append("━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n");
         
         tooltip.append("Währungspaar: ").append(change.getCurrencyPair()).append("\n");
         tooltip.append("Wechsel: ").append(change.getDetailedDescription()).append("\n");
@@ -212,29 +351,6 @@ public class SignalChangeTableCell extends TableCell<CurrencyPairTableRow, Curre
         tooltip.append("📊 Klicken für vollständige Historie");
         
         return tooltip.toString();
-    }
-    
-    /**
-     * Fügt Hover-Effekte hinzu
-     */
-    private void addHoverEffects(SignalChangeEvent change) {
-        changeButton.setOnMouseEntered(event -> {
-            // Vergrößere Button leicht beim Hover
-            changeButton.setScaleX(1.2);
-            changeButton.setScaleY(1.2);
-            
-            // Ändere Cursor
-            changeButton.getScene().setCursor(javafx.scene.Cursor.HAND);
-        });
-        
-        changeButton.setOnMouseExited(event -> {
-            // Zurück zur normalen Größe
-            changeButton.setScaleX(1.0);
-            changeButton.setScaleY(1.0);
-            
-            // Cursor zurücksetzen
-            changeButton.getScene().setCursor(javafx.scene.Cursor.DEFAULT);
-        });
     }
     
     /**

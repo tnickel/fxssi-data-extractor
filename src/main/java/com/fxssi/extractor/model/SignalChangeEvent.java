@@ -3,6 +3,10 @@ package com.fxssi.extractor.model;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.temporal.ChronoUnit;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
+import java.text.NumberFormat;
+import java.util.Locale;
 
 /**
  * Datenmodell für Signalwechsel-Ereignisse
@@ -20,6 +24,19 @@ public class SignalChangeEvent {
     private final double fromBuyPercentage;
     private final double toBuyPercentage;
     private final SignalChangeImportance importance;
+    
+    // Formatter für CSV-Verarbeitung
+    private static final DecimalFormat CSV_DECIMAL_FORMAT;
+    private static final NumberFormat CSV_PARSE_FORMAT;
+    
+    static {
+        // Für CSV-Output: Komma als Dezimaltrennzeichen (Deutsches Format)
+        DecimalFormatSymbols symbols = new DecimalFormatSymbols(Locale.GERMAN);
+        CSV_DECIMAL_FORMAT = new DecimalFormat("#0.00", symbols);
+        
+        // Für CSV-Input: Flexibles Parsing (sowohl Komma als auch Punkt)
+        CSV_PARSE_FORMAT = NumberFormat.getNumberInstance(Locale.GERMAN);
+    }
     
     /**
      * Enum für die Wichtigkeit von Signalwechseln
@@ -85,7 +102,7 @@ public class SignalChangeEvent {
     }
     
     /**
-     * Konstruktor aus CSV-Zeile
+     * Konstruktor aus CSV-Zeile - REPARIERT für deutsches Dezimalformat
      */
     public static SignalChangeEvent fromCsvLine(String csvLine) {
         String[] parts = csvLine.split(";");
@@ -99,12 +116,39 @@ public class SignalChangeEvent {
             String currencyPair = parts[1];
             CurrencyPairData.TradingSignal fromSignal = CurrencyPairData.TradingSignal.valueOf(parts[2]);
             CurrencyPairData.TradingSignal toSignal = CurrencyPairData.TradingSignal.valueOf(parts[3]);
-            double fromBuyPercentage = Double.parseDouble(parts[4]);
-            double toBuyPercentage = Double.parseDouble(parts[5]);
+            
+            // REPARIERT: Flexibles Parsing für Dezimalzahlen (Komma und Punkt)
+            double fromBuyPercentage = parseDecimalValue(parts[4]);
+            double toBuyPercentage = parseDecimalValue(parts[5]);
             
             return new SignalChangeEvent(currencyPair, fromSignal, toSignal, changeTime, fromBuyPercentage, toBuyPercentage);
         } catch (Exception e) {
             throw new IllegalArgumentException("Fehler beim Parsen der Signal-Change CSV-Zeile: " + csvLine, e);
+        }
+    }
+    
+    /**
+     * Hilfsmethode für flexibles Parsen von Dezimalwerten (Komma und Punkt)
+     */
+    private static double parseDecimalValue(String value) throws Exception {
+        if (value == null || value.trim().isEmpty()) {
+            return 0.0;
+        }
+        
+        value = value.trim();
+        
+        try {
+            // Versuche zuerst deutsches Format (Komma)
+            if (value.contains(",")) {
+                return CSV_PARSE_FORMAT.parse(value).doubleValue();
+            } else {
+                // Fallback: Standard-Format (Punkt)
+                return Double.parseDouble(value);
+            }
+        } catch (Exception e) {
+            // Letzter Versuch: Komma durch Punkt ersetzen
+            String normalizedValue = value.replace(",", ".");
+            return Double.parseDouble(normalizedValue);
         }
     }
     
@@ -214,17 +258,17 @@ public class SignalChangeEvent {
     }
     
     /**
-     * Formatiert als CSV-Zeile für Speicherung
+     * Formatiert als CSV-Zeile für Speicherung - KONSISTENT mit deutschem Format
      */
     public String toCsvLine() {
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss");
-        return String.format("%s;%s;%s;%s;%.2f;%.2f",
+        return String.format("%s;%s;%s;%s;%s;%s",
             changeTime.format(formatter),
             currencyPair,
             fromSignal.name(),
             toSignal.name(),
-            fromBuyPercentage,
-            toBuyPercentage);
+            CSV_DECIMAL_FORMAT.format(fromBuyPercentage),
+            CSV_DECIMAL_FORMAT.format(toBuyPercentage));
     }
     
     /**
