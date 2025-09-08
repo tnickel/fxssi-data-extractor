@@ -12,16 +12,16 @@ import java.util.logging.Level;
  * Vollständige Java-Implementation ohne FXML mit konfigurierbarem Datenverzeichnis
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.2 (mit breiterem Fenster für bessere Balken-Sichtbarkeit)
+ * @version 1.3 (mit erweiterten Fensterabmessungen für bessere Balken-Sichtbarkeit)
  */
 public class FXSSIGuiApplication extends Application {
     
     private static final Logger LOGGER = Logger.getLogger(FXSSIGuiApplication.class.getName());
     private static final String WINDOW_TITLE = "FXSSI Data Extractor - Live Sentiment Monitor";
-    private static final int WINDOW_WIDTH = 1400;   // Erweitert von 1200 auf 1400
-    private static final int WINDOW_HEIGHT = 800;
-    private static final int MIN_WINDOW_WIDTH = 1000; // Erweitert von 800 auf 1000
-    private static final int MIN_WINDOW_HEIGHT = 600;
+    private static final int WINDOW_WIDTH = 1820;   // *** ERWEITERT: 30% größer (von 1400 auf 1820) ***
+    private static final int WINDOW_HEIGHT = 1040;  // *** ERWEITERT: 30% größer (von 800 auf 1040) ***
+    private static final int MIN_WINDOW_WIDTH = 1300; // *** ANGEPASST: Minimum auch erhöht (von 1000 auf 1300) ***
+    private static final int MIN_WINDOW_HEIGHT = 780;  // *** ANGEPASST: Minimum auch erhöht (von 600 auf 780) ***
     private static final String DEFAULT_DATA_DIRECTORY = "data";
     
     private MainWindowController mainController;
@@ -48,7 +48,7 @@ public class FXSSIGuiApplication extends Application {
             // Starte Datenservice
             mainController.startDataService();
             
-            LOGGER.info("FXSSI GUI Application erfolgreich gestartet (1400x800)");
+            LOGGER.info("FXSSI GUI Application erfolgreich gestartet (" + WINDOW_WIDTH + "x" + WINDOW_HEIGHT + ") - ERWEITERTE ABMESSUNGEN");
             
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Fehler beim Starten der GUI Application: " + e.getMessage(), e);
@@ -109,7 +109,7 @@ public class FXSSIGuiApplication extends Application {
         primaryStage.centerOnScreen();
         
         LOGGER.info("Hauptfenster konfiguriert: " + WINDOW_WIDTH + "x" + WINDOW_HEIGHT + 
-                   " (Min: " + MIN_WINDOW_WIDTH + "x" + MIN_WINDOW_HEIGHT + ")");
+                   " (Min: " + MIN_WINDOW_WIDTH + "x" + MIN_WINDOW_HEIGHT + ") - ERWEITERTE ABMESSUNGEN für optimale Balken-Sichtbarkeit");
     }
     
     /**
@@ -123,7 +123,8 @@ public class FXSSIGuiApplication extends Application {
             alert.setHeaderText("Die FXSSI GUI konnte nicht gestartet werden");
             alert.setContentText("Fehler: " + e.getMessage() + "\n\nBitte überprüfen Sie die Logs für weitere Details." +
                 "\n\nDatenverzeichnis: " + configuredDataDirectory +
-                "\n\nEmpfohlene Fensterbreite: " + WINDOW_WIDTH + "px für optimale Balken-Sichtbarkeit");
+                "\n\nErweiterte Fensterbreite: " + WINDOW_WIDTH + "px für optimale Balken-Sichtbarkeit" +
+                "\n\nErweiterte Fensterhöhe: " + WINDOW_HEIGHT + "px für bessere Übersicht");
             alert.showAndWait();
         } catch (Exception alertException) {
             LOGGER.log(Level.SEVERE, "Fehler beim Anzeigen der Fehlermeldung: " + alertException.getMessage(), alertException);
@@ -165,7 +166,7 @@ public class FXSSIGuiApplication extends Application {
     public static void launchGui(String[] args, String dataDirectory) {
         LOGGER.info("Starte JavaFX GUI für FXSSI Data Extractor...");
         LOGGER.info("Datenverzeichnis: " + dataDirectory);
-        LOGGER.info("Fensterabmessungen: " + WINDOW_WIDTH + "x" + WINDOW_HEIGHT + " (erweitert für bessere Balken-Sichtbarkeit)");
+        LOGGER.info("Erweiterte Fensterabmessungen: " + WINDOW_WIDTH + "x" + WINDOW_HEIGHT + " (30% größer für bessere Balken-Sichtbarkeit)");
         
         // Setze das Datenverzeichnis vor dem Start
         setDataDirectory(dataDirectory);

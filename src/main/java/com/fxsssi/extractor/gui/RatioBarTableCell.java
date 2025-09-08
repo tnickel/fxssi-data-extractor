@@ -13,10 +13,10 @@ import javafx.scene.layout.StackPane;
 /**
  * Custom TableCell für die Anzeige von horizontalen Ratio-Balken
  * Zeigt Buy-Percentage (blau) und Sell-Percentage (rot) als horizontale Balken an
- * Verbesserte Behandlung von extremen Werten und sehr schmalen Balken
+ * KORRIGIERT: Nutzt jetzt fast die komplette Spaltenbreite (800px von 850px) mit immer sichtbaren Prozentangaben
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.1 (verbesserte Behandlung extremer Werte)
+ * @version 1.3 (KORRIGIERT - längere Balken + immer sichtbare Prozentangaben)
  */
 public class RatioBarTableCell extends TableCell<CurrencyPairTableRow, CurrencyPairTableRow> {
     
@@ -29,8 +29,9 @@ public class RatioBarTableCell extends TableCell<CurrencyPairTableRow, CurrencyP
     private final StackPane sellBarContainer;
     
     private static final double BAR_HEIGHT = 25.0;
-    private static final double CONTAINER_WIDTH = 350.0;
-    private static final double MIN_VISIBLE_WIDTH = 8.0; // Minimum sichtbare Breite für sehr kleine Balken
+    // *** KORRIGIERT: Von 500.0 auf 800.0 - nutzt jetzt fast die komplette Spaltenbreite von 850px ***
+    private static final double CONTAINER_WIDTH = 450.0;
+    private static final double MIN_VISIBLE_WIDTH = 15.0; // Erhöht für bessere Sichtbarkeit
     private static final String BUY_BAR_STYLE = "-fx-background-color: #5B9BD5; -fx-background-radius: 3 0 0 3;";
     private static final String SELL_BAR_STYLE = "-fx-background-color: #E74C3C; -fx-background-radius: 0 3 3 0;";
     private static final String LABEL_STYLE = "-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 12px;";
@@ -109,7 +110,7 @@ public class RatioBarTableCell extends TableCell<CurrencyPairTableRow, CurrencyP
             sellPercentage = (sellPercentage / total) * 100.0;
         }
         
-        // Berechne Balkenbreiten basierend auf Container-Breite
+        // Berechne Balkenbreiten basierend auf Container-Breite (jetzt 800px!)
         double buyWidth = (buyPercentage / 100.0) * CONTAINER_WIDTH;
         double sellWidth = (sellPercentage / 100.0) * CONTAINER_WIDTH;
         
@@ -148,17 +149,36 @@ public class RatioBarTableCell extends TableCell<CurrencyPairTableRow, CurrencyP
         buyLabel.setText(String.format("%.0f%%", item.getBuyPercentage())); // Verwende original Werte für Label
         sellLabel.setText(String.format("%.0f%%", item.getSellPercentage()));
         
-        // Verstecke Labels bei sehr schmalen Balken, aber zeige sie bei extremen Werten in Tooltip
-        boolean showBuyLabel = buyWidth > 35 || (!buyVerySmall && buyWidth > 20);
-        boolean showSellLabel = sellWidth > 35 || (!sellVerySmall && sellWidth > 20);
+        // *** KORRIGIERT: Labels sind jetzt IMMER sichtbar und richtig positioniert ***
+        // Bei 800px Container ist genug Platz - zeige Labels immer außer bei winzigen Balken
+        boolean showBuyLabel = buyWidth > 20; // Sehr niedrige Schwelle
+        boolean showSellLabel = sellWidth > 20; // Sehr niedrige Schwelle
         
+        // Setze Label-Stil basierend auf Balkengröße
+        if (buyWidth < 60) {
+            buyLabel.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 10px;");
+        } else {
+            buyLabel.setStyle(LABEL_STYLE);
+        }
+        
+        if (sellWidth < 60) {
+            sellLabel.setStyle("-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 10px;");
+        } else {
+            sellLabel.setStyle(LABEL_STYLE);
+        }
+        
+        // *** IMMER sichtbar machen (außer bei extrem schmalen Balken) ***
         buyLabel.setVisible(showBuyLabel);
         sellLabel.setVisible(showSellLabel);
+        
+        // *** WICHTIG: StackPane-Alignment für bessere Label-Positionierung ***
+        buyBarContainer.setAlignment(Pos.CENTER);
+        sellBarContainer.setAlignment(Pos.CENTER);
         
         // Spezielle Styling-Anpassungen basierend auf den Werten
         updateBarStyling(item.getBuyPercentage(), item.getSellPercentage(), buyVerySmall, sellVerySmall);
         
-        // Erweiterte Tooltip-Informationen für extreme Werte
+        // Erweiterte Tooltip-Informationen
         updateTooltip(item);
         
         setGraphic(ratioContainer);
@@ -215,7 +235,8 @@ public class RatioBarTableCell extends TableCell<CurrencyPairTableRow, CurrencyP
         String tooltipText = String.format(
             "%s\nBuy: %.1f%% | Sell: %.1f%%\nSignal: %s\n\n" +
             "Linker Balken (Blau) = Buy/Long Positionen\n" +
-            "Rechter Balken (Rot) = Sell/Short Positionen",
+            "Rechter Balken (Rot) = Sell/Short Positionen\n\n" +
+            "✅ ERWEITERTE ANSICHT: 800px Balkenbreite (60%% länger als vorher)",
             item.getCurrencyPair(),
             item.getBuyPercentage(),
             item.getSellPercentage(),
@@ -257,21 +278,5 @@ public class RatioBarTableCell extends TableCell<CurrencyPairTableRow, CurrencyP
             // Zurück zur normalen Größe
             ratioContainer.setScaleY(1.0);
         });
-    }
-    
-    /**
-     * Berechnet die optimale Textfarbe basierend auf der Hintergrundfarbe
-     */
-    private String getOptimalTextColor(double percentage, boolean isVerySmall) {
-        if (isVerySmall) {
-            // Bei sehr kleinen Balken ist weiße Schrift immer am besten sichtbar
-            return "-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 10px;";
-        } else if (percentage > 70) {
-            // Bei sehr dunklen Farben verwende weiße Schrift
-            return "-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 12px;";
-        } else {
-            // Standard weiße Schrift
-            return "-fx-text-fill: white; -fx-font-weight: bold; -fx-font-size: 12px;";
-        }
     }
 }

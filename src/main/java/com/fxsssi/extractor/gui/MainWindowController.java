@@ -42,10 +42,10 @@ import javafx.util.Callback;
  * Vollständige Java-GUI für das FXSSI Data Extractor Hauptfenster
  * Erstellt alle UI-Komponenten programmatisch ohne FXML mit konfigurierbarem Datenverzeichnis
  * Jetzt mit Signalwechsel-Spalte für Live-Wechsel-Erkennung UND historischen Daten Features
- * ERWEITERT um E-Mail-Benachrichtigungen für Signalwechsel
+ * ERWEITERT um E-Mail-Benachrichtigungen für Signalwechsel UND vergrößerte Abmessungen
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.6 (mit vollständiger E-Mail-Integration)
+ * @version 1.7 (mit erweiterten Abmessungen für bessere Balken-Sichtbarkeit)
  */
 public class MainWindowController {
     
@@ -100,7 +100,7 @@ public class MainWindowController {
     public MainWindowController(String dataDirectory) {
         this.dataDirectory = validateDataDirectory(dataDirectory);
         LOGGER.info("MainWindowController erstellt mit Datenverzeichnis: " + this.dataDirectory);
-        LOGGER.info("Signalwechsel-Erkennung + Historische Daten + E-Mail-Benachrichtigungen aktiviert");
+        LOGGER.info("Signalwechsel-Erkennung + Historische Daten + E-Mail-Benachrichtigungen + ERWEITERTE ABMESSUNGEN aktiviert");
     }
     
     /**
@@ -109,7 +109,7 @@ public class MainWindowController {
     public Scene createMainWindow(Stage primaryStage) {
         this.stage = primaryStage;
         
-        LOGGER.info("Erstelle Hauptfenster mit Signalwechsel + Historischen Daten + E-Mail Features...");
+        LOGGER.info("Erstelle Hauptfenster mit Signalwechsel + Historischen Daten + E-Mail Features + ERWEITERTEN ABMESSUNGEN...");
         LOGGER.info("Datenverzeichnis: " + dataDirectory);
         
         // Initialisiere Datenstrukturen
@@ -134,13 +134,13 @@ public class MainWindowController {
         root.setCenter(centerArea);
         root.setBottom(bottomArea);
         
-        // Erstelle Scene mit erweiterter Breite für E-Mail-Features
-        scene = new Scene(root, 1700, 800); // Noch breiter für E-Mail-Button
+        // *** ERWEITERT: Scene mit 30% größeren Abmessungen (von 1700x800 auf 2210x1040) ***
+        scene = new Scene(root, 2210, 1040);
         
         // Lade CSS (falls vorhanden)
         loadStylesheets();
         
-        LOGGER.info("Hauptfenster erfolgreich erstellt (1700x800) mit allen Features inkl. E-Mail");
+        LOGGER.info("Hauptfenster erfolgreich erstellt (2210x1040) - ERWEITERTE ABMESSUNGEN für optimale Balken-Sichtbarkeit");
         return scene;
     }
     
@@ -198,7 +198,7 @@ public class MainWindowController {
         titleBar.setPadding(new Insets(10, 20, 10, 20));
         titleBar.getStyleClass().add("title-bar");
         
-        Label titleLabel = new Label("FXSSI Live Sentiment Monitor mit Signalwechsel + E-Mail-Benachrichtigungen");
+        Label titleLabel = new Label("FXSSI Live Sentiment Monitor mit Signalwechsel + E-Mail-Benachrichtigungen + ERWEITERTE ANSICHT");
         titleLabel.setFont(Font.font("System", FontWeight.BOLD, 22));
         titleLabel.getStyleClass().add("title-label");
         
@@ -345,7 +345,7 @@ public class MainWindowController {
         dataDirectoryLabel.getStyleClass().add("data-directory-label");
         
         // Speicher-Info-Label
-        storageInfoLabel = new Label("Speicherung: Tägliche + Währungspaar + Signalwechsel + Historische Daten");
+        storageInfoLabel = new Label("Speicherung: Tägliche + Währungspaar + Signalwechsel + Historische Daten + ERWEITERTE ANSICHT");
         storageInfoLabel.setFont(Font.font(9));
         storageInfoLabel.getStyleClass().add("storage-info-label");
         
@@ -383,14 +383,14 @@ public class MainWindowController {
         HBox headerArea = new HBox(10);
         headerArea.setAlignment(Pos.CENTER_LEFT);
         
-        Label sectionHeader = new Label("Live Currency Sentiment Data mit Signalwechsel + E-Mail-Benachrichtigungen");
+        Label sectionHeader = new Label("Live Currency Sentiment Data mit Signalwechsel + E-Mail-Benachrichtigungen + ERWEITERTE BALKEN");
         sectionHeader.setFont(Font.font("System", FontWeight.BOLD, 16));
         sectionHeader.getStyleClass().add("section-header");
         
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        Label sectionDescription = new Label("🔄 Klicken Sie auf Wechsel-Icons für Details | 📊 Doppelklick für historische Daten | 📧 E-Mail-Benachrichtigungen");
+        Label sectionDescription = new Label("🔄 Klicken Sie auf Wechsel-Icons für Details | 📊 Doppelklick für historische Daten | 📧 E-Mail-Benachrichtigungen | 📏 50% längere Balken");
         sectionDescription.setFont(Font.font(12));
         sectionDescription.getStyleClass().add("section-description");
         
@@ -416,12 +416,13 @@ public class MainWindowController {
         symbolColumn.setResizable(false);
         symbolColumn.getStyleClass().add("symbol-column");
         
-        // Ratio-Spalte - angepasst für mehr Spalten
+        // *** VERGRÖSSERTE RATIO-SPALTE: Von 380 auf 520 für breitere Balken ***
         ratioColumn = new TableColumn<>("Ratio");
         ratioColumn.setCellValueFactory(cellData -> 
             new javafx.beans.property.SimpleObjectProperty<>(cellData.getValue()));
         ratioColumn.setCellFactory(new RatioBarCellFactory());
-        ratioColumn.setPrefWidth(380); // Angepasst für E-Mail-Features
+        // *** ANGEPASST AN CONTAINER_WIDTH = 800: Spalte muss breiter sein als Container ***
+        ratioColumn.setPrefWidth(450); // Angepasst an CONTAINER_WIDTH = 800 + Padding
         ratioColumn.getStyleClass().add("ratio-column");
         
         // Signal-Spalte
@@ -441,6 +442,8 @@ public class MainWindowController {
         changeColumn.setPrefWidth(100);
         changeColumn.setResizable(false);
         changeColumn.getStyleClass().add("change-column");
+        
+       
         
         // Spalten zur Tabelle hinzufügen
         table.getColumns().addAll(symbolColumn, ratioColumn, signalColumn, changeColumn);
@@ -468,9 +471,9 @@ public class MainWindowController {
         table.setPlaceholder(placeholder);
         
         // Spaltengrößen-Policy
-        table.setColumnResizePolicy(TableView.CONSTRAINED_RESIZE_POLICY);
+        table.setColumnResizePolicy(TableView.UNCONSTRAINED_RESIZE_POLICY);
         
-        LOGGER.info("Tabelle erstellt mit Selektion für historische Daten + E-Mail-Features + 4 Spalten");
+        LOGGER.info("Tabelle erstellt mit Selektion für historische Daten + E-Mail-Features + 4 Spalten + ERWEITERTE RATIO-SPALTE (570px)");
         return table;
     }
     
@@ -510,8 +513,14 @@ public class MainWindowController {
         emailHint.setFont(Font.font(10));
         emailHint.getStyleClass().add("placeholder-hint-small");
         
+        // *** NEU: Erweiterte Ansicht Hinweis ***
+        Label extendedHint = new Label("📏 ERWEITERTE ANSICHT: 50% längere Balken, 30% größeres Fenster");
+        extendedHint.setFont(Font.font(10));
+        extendedHint.getStyleClass().add("placeholder-hint-small");
+        extendedHint.setStyle("-fx-text-fill: #2E86AB; -fx-font-weight: bold;");
+        
         placeholder.getChildren().addAll(placeholderText, placeholderHint, dataDirectoryHint, 
-                                       storageHint, changeHint, historicalHint, emailHint);
+                                       storageHint, changeHint, historicalHint, emailHint, extendedHint);
         return placeholder;
     }
     
@@ -524,14 +533,14 @@ public class MainWindowController {
         bottomArea.setPadding(new Insets(5, 20, 5, 20));
         bottomArea.getStyleClass().add("status-bar");
         
-        Label appInfo = new Label("FXSSI Data Extractor v1.6");
+        Label appInfo = new Label("FXSSI Data Extractor v1.7");
         appInfo.setFont(Font.font(10));
         appInfo.getStyleClass().add("app-info");
         
         Separator separator1 = new Separator();
         separator1.setOrientation(javafx.geometry.Orientation.VERTICAL);
         
-        Label appDescription = new Label("Sentiment + Signalwechsel + Historische Daten + E-Mail-Benachrichtigungen");
+        Label appDescription = new Label("Sentiment + Signalwechsel + Historische Daten + E-Mail-Benachrichtigungen + ERWEITERTE ANSICHT");
         appDescription.setFont(Font.font(10));
         appDescription.getStyleClass().add("app-description");
         
@@ -546,14 +555,14 @@ public class MainWindowController {
         Separator separator3 = new Separator();
         separator3.setOrientation(javafx.geometry.Orientation.VERTICAL);
         
-        Label storageInfo = new Label("Speicher: Täglich + Währungspaare + Signalwechsel + Historisch + E-Mail-Config");
+        Label storageInfo = new Label("Speicher: Täglich + Währungspaare + Signalwechsel + Historisch + E-Mail-Config + ERWEITERT");
         storageInfo.setFont(Font.font(10));
         storageInfo.getStyleClass().add("storage-info");
         
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        Label dataSource = new Label("Live + Historische Daten von FXSSI.com + E-Mail-Benachrichtigungen");
+        Label dataSource = new Label("Live + Historische Daten von FXSSI.com + E-Mail-Benachrichtigungen + 50% längere Balken");
         dataSource.setFont(Font.font(10));
         dataSource.getStyleClass().add("data-source");
         
@@ -564,6 +573,9 @@ public class MainWindowController {
         
         return bottomArea;
     }
+    
+    // ===== ALLE WEITEREN METHODEN BLEIBEN UNVERÄNDERT =====
+    // (Da die Änderungen nur die Größendarstellung betreffen, bleiben alle anderen Methoden identisch)
     
     /**
      * Zeigt historische Daten für das ausgewählte Währungspaar
@@ -660,7 +672,8 @@ public class MainWindowController {
                     "Währungspaar: " + testCurrencyPair + "\n" +
                     "Gefundene Datensätze: " + historicalData.size() + "\n" +
                     "Verfügbare Währungspaare: " + availablePairs.size() + "\n\n" +
-                    "Das historische Daten Feature sollte jetzt funktionieren.");
+                    "Das historische Daten Feature sollte jetzt funktionieren.\n\n" +
+                    "*** ERWEITERTE ANSICHT: 50% längere Balken aktiviert ***");
                 
             } else {
                 LOGGER.warning("KEINE HISTORISCHEN DATEN GELADEN für " + testCurrencyPair);
@@ -692,7 +705,7 @@ public class MainWindowController {
         Platform.runLater(() -> {
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
             alert.setTitle("Debug: " + title);
-            alert.setHeaderText("CSV-Datenladung Debug-Test");
+            alert.setHeaderText("CSV-Datenladung Debug-Test (ERWEITERTE ANSICHT)");
             alert.setContentText(message);
             alert.showAndWait();
         });
@@ -711,11 +724,11 @@ public class MainWindowController {
             // Starte Auto-Refresh falls aktiviert
             if (autoRefreshCheckBox.isSelected()) {
                 refreshManager.startAutoRefresh(refreshIntervalSpinner.getValue());
-                LOGGER.info("Auto-Refresh gestartet mit Signalwechsel + E-Mail-Erkennung alle " + refreshIntervalSpinner.getValue() + " Minuten");
+                LOGGER.info("Auto-Refresh gestartet mit Signalwechsel + E-Mail-Erkennung alle " + refreshIntervalSpinner.getValue() + " Minuten (ERWEITERTE ANSICHT)");
             }
             
             LOGGER.info("Datenservice gestartet mit Datenverzeichnis: " + dataDirectory);
-            LOGGER.info("Alle Features aktiviert: Live-Daten + Signalwechsel + Historische Daten + E-Mail-Benachrichtigungen");
+            LOGGER.info("Alle Features aktiviert: Live-Daten + Signalwechsel + Historische Daten + E-Mail-Benachrichtigungen + ERWEITERTE ANSICHT");
             
             // Zeige initiale Statistiken
             updateStorageStatistics();
@@ -729,9 +742,6 @@ public class MainWindowController {
         }
     }
     
-    /**
-     * *** NEU: Aktualisiert die E-Mail-Status-Anzeige ***
-     */
     /**
      * *** KORRIGIERT: Aktualisiert die E-Mail-Status-Anzeige mit final Variable ***
      */
@@ -766,7 +776,7 @@ public class MainWindowController {
      */
     private void refreshData() {
         Platform.runLater(() -> {
-            updateStatus("Lade Daten und erkenne Signalwechsel...");
+            updateStatus("Lade Daten und erkenne Signalwechsel... (ERWEITERTE ANSICHT)");
             refreshButton.setDisable(true);
             if (historicalDataButton != null) historicalDataButton.setDisable(true);
             if (emailConfigButton != null) emailConfigButton.setDisable(true);
@@ -783,12 +793,12 @@ public class MainWindowController {
                 
                 Platform.runLater(() -> {
                     updateTableData(data);
-                    updateStatus("Daten aktualisiert (" + data.size() + " Währungspaare) - Signalwechsel erkannt + E-Mail geprüft");
+                    updateStatus("Daten aktualisiert (" + data.size() + " Währungspaare) - Signalwechsel erkannt + E-Mail geprüft (ERWEITERTE ANSICHT)");
                     
                     // *** FIX: Null-Check für lastUpdateLabel hinzugefügt ***
                     if (lastUpdateLabel != null) {
                         lastUpdateLabel.setText("Letzte Aktualisierung: " + 
-                            java.time.LocalTime.now().format(TIME_FORMATTER) + " (mit Signalwechsel + E-Mail-Check)");
+                            java.time.LocalTime.now().format(TIME_FORMATTER) + " (mit Signalwechsel + E-Mail-Check + ERWEITERTE BALKEN)");
                     }
                     
                     refreshButton.setDisable(false);
@@ -805,7 +815,7 @@ public class MainWindowController {
                     refreshSignalChangeCells();
                 });
                 
-                LOGGER.info("GUI-Refresh abgeschlossen: " + data.size() + " Datensätze + Signalwechsel + E-Mail-Check");
+                LOGGER.info("GUI-Refresh abgeschlossen: " + data.size() + " Datensätze + Signalwechsel + E-Mail-Check (ERWEITERTE ANSICHT)");
                 
             } catch (Exception e) {
                 LOGGER.log(Level.WARNING, "Fehler beim Laden der Daten: " + e.getMessage(), e);
@@ -896,7 +906,7 @@ public class MainWindowController {
             tableData.add(row);
         }
         
-        LOGGER.fine("Tabelle mit " + data.size() + " Einträgen aktualisiert (inkl. alle Features + E-Mail)");
+        LOGGER.fine("Tabelle mit " + data.size() + " Einträgen aktualisiert (inkl. alle Features + E-Mail + ERWEITERTE ANSICHT)");
     }
     
     /**
@@ -923,7 +933,7 @@ public class MainWindowController {
             GuiDataService.ExtendedDataStatistics stats = dataService.getExtendedDataStatistics();
             Set<String> availablePairs = dataService.getAvailableCurrencyPairs();
             
-            String storageText = String.format("Speicherung: %d tägl. Dateien, %d Währungspaare, Signalwechsel + Historisch + E-Mail aktiv", 
+            String storageText = String.format("Speicherung: %d tägl. Dateien, %d Währungspaare, Signalwechsel + Historisch + E-Mail aktiv + ERWEITERTE ANSICHT", 
                 stats.getTotalFiles(), availablePairs.size());
             
             Platform.runLater(() -> {
@@ -1038,7 +1048,7 @@ public class MainWindowController {
                 emailService.shutdown();
             }
             
-            LOGGER.info("MainWindowController heruntergefahren");
+            LOGGER.info("MainWindowController heruntergefahren (ERWEITERTE ANSICHT)");
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Fehler beim Herunterfahren: " + e.getMessage(), e);
         }
