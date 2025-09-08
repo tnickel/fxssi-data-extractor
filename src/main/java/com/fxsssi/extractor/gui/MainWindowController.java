@@ -135,13 +135,13 @@ public class MainWindowController {
         root.setBottom(bottomArea);
         
         // *** ERWEITERT: Scene mit 30% größeren Abmessungen (von 1700x800 auf 2210x1040) ***
-        scene = new Scene(root, 2210, 1040);
-        
+        scene = new Scene(root, 2450, 1040); // Zusätzliche 240px Breite für Chart-Spalten
+     
         // Lade CSS (falls vorhanden)
         loadStylesheets();
         
-        LOGGER.info("Hauptfenster erfolgreich erstellt (2210x1040) - ERWEITERTE ABMESSUNGEN für optimale Balken-Sichtbarkeit");
-        return scene;
+        LOGGER.info("Hauptfenster erfolgreich erstellt (2450x1040) - ERWEITERTE ANSICHT mit MINI-CHARTS (7T/30T) für optimale Signalverlauf-Sichtbarkeit");
+       return scene;
     }
     
     /**
@@ -383,14 +383,14 @@ public class MainWindowController {
         HBox headerArea = new HBox(10);
         headerArea.setAlignment(Pos.CENTER_LEFT);
         
-        Label sectionHeader = new Label("Live Currency Sentiment Data mit Signalwechsel + E-Mail-Benachrichtigungen + ERWEITERTE BALKEN");
+        Label sectionHeader = new Label("Live Currency Sentiment Data mit Signalwechsel + E-Mail + MINI-CHARTS");
         sectionHeader.setFont(Font.font("System", FontWeight.BOLD, 16));
         sectionHeader.getStyleClass().add("section-header");
         
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        Label sectionDescription = new Label("🔄 Klicken Sie auf Wechsel-Icons für Details | 📊 Doppelklick für historische Daten | 📧 E-Mail-Benachrichtigungen | 📏 50% längere Balken");
+        Label sectionDescription = new Label("🔄 Klicken Sie auf Wechsel-Icons für Details | 📊 Doppelklick für historische Daten | 📧 E-Mail-Benachrichtigungen | 📈 7T/30T Mini-Charts");
         sectionDescription.setFont(Font.font(12));
         sectionDescription.getStyleClass().add("section-description");
         
@@ -416,12 +416,11 @@ public class MainWindowController {
         symbolColumn.setResizable(false);
         symbolColumn.getStyleClass().add("symbol-column");
         
-        // *** VERGRÖSSERTE RATIO-SPALTE: Von 380 auf 520 für breitere Balken ***
+        // VERGRÖSSERTE RATIO-SPALTE: Von 380 auf 520 für breitere Balken
         ratioColumn = new TableColumn<>("Ratio");
         ratioColumn.setCellValueFactory(cellData -> 
             new javafx.beans.property.SimpleObjectProperty<>(cellData.getValue()));
         ratioColumn.setCellFactory(new RatioBarCellFactory());
-        // *** ANGEPASST AN CONTAINER_WIDTH = 800: Spalte muss breiter sein als Container ***
         ratioColumn.setPrefWidth(450); // Angepasst an CONTAINER_WIDTH = 800 + Padding
         ratioColumn.getStyleClass().add("ratio-column");
         
@@ -443,10 +442,35 @@ public class MainWindowController {
         changeColumn.setResizable(false);
         changeColumn.getStyleClass().add("change-column");
         
-       
+        // *** NEU: 7-Tage Chart-Spalte ***
+        TableColumn<CurrencyPairTableRow, CurrencyPairTableRow> chart7DaysColumn = 
+            new TableColumn<>("📊 7T");
+        chart7DaysColumn.setCellValueFactory(cellData -> 
+            new javafx.beans.property.SimpleObjectProperty<>(cellData.getValue()));
+        chart7DaysColumn.setCellFactory(new SignalChart7DaysCellFactory());
+        chart7DaysColumn.setPrefWidth(120);
+        chart7DaysColumn.setMinWidth(120);
+        chart7DaysColumn.setMaxWidth(120);
+        chart7DaysColumn.setResizable(false);
+        chart7DaysColumn.setSortable(false);
+        chart7DaysColumn.getStyleClass().add("chart-7days-column");
         
-        // Spalten zur Tabelle hinzufügen
-        table.getColumns().addAll(symbolColumn, ratioColumn, signalColumn, changeColumn);
+        // *** NEU: 30-Tage Chart-Spalte ***
+        TableColumn<CurrencyPairTableRow, CurrencyPairTableRow> chart30DaysColumn = 
+            new TableColumn<>("📈 30T");
+        chart30DaysColumn.setCellValueFactory(cellData -> 
+            new javafx.beans.property.SimpleObjectProperty<>(cellData.getValue()));
+        chart30DaysColumn.setCellFactory(new SignalChart30DaysCellFactory());
+        chart30DaysColumn.setPrefWidth(120);
+        chart30DaysColumn.setMinWidth(120);
+        chart30DaysColumn.setMaxWidth(120);
+        chart30DaysColumn.setResizable(false);
+        chart30DaysColumn.setSortable(false);
+        chart30DaysColumn.getStyleClass().add("chart-30days-column");
+        
+        // *** ERWEITERT: Spalten zur Tabelle hinzufügen (inklusive neue Chart-Spalten) ***
+        table.getColumns().addAll(symbolColumn, ratioColumn, signalColumn, changeColumn, 
+                                  chart7DaysColumn, chart30DaysColumn);
         
         // Tabellen-Konfiguration
         table.setItems(tableData);
@@ -473,10 +497,58 @@ public class MainWindowController {
         // Spaltengrößen-Policy
         table.setColumnResizePolicy(TableView.UNCONSTRAINED_RESIZE_POLICY);
         
-        LOGGER.info("Tabelle erstellt mit Selektion für historische Daten + E-Mail-Features + 4 Spalten + ERWEITERTE RATIO-SPALTE (570px)");
+        LOGGER.info("Tabelle erstellt mit 6 Spalten: Symbol + Ratio + Signal + Wechsel + 7T-Chart + 30T-Chart");
         return table;
     }
-    
+    private class SignalChart7DaysCellFactory implements Callback<TableColumn<CurrencyPairTableRow, CurrencyPairTableRow>, TableCell<CurrencyPairTableRow, CurrencyPairTableRow>> {
+        @Override
+        public TableCell<CurrencyPairTableRow, CurrencyPairTableRow> call(TableColumn<CurrencyPairTableRow, CurrencyPairTableRow> param) {
+            try {
+                return new SignalHistoryChartTableCell(7, dataService);
+            } catch (Exception e) {
+                LOGGER.warning("Fehler beim Erstellen der 7-Tage Chart-Zelle: " + e.getMessage());
+                // Fallback: Leere Zelle mit Fehlermeldung
+                return new TableCell<CurrencyPairTableRow, CurrencyPairTableRow>() {
+                    @Override
+                    protected void updateItem(CurrencyPairTableRow item, boolean empty) {
+                        super.updateItem(item, empty);
+                        if (empty || item == null) {
+                            setText("");
+                        } else {
+                            setText("❌ 7T");
+                        }
+                    }
+                };
+            }
+        }
+    }
+
+    /**
+     * *** NEU: Cell Factory für 30-Tage Signalverlauf-Charts ***
+     * Diese Klasse muss als innere Klasse in MainWindowController eingefügt werden
+     */
+    private class SignalChart30DaysCellFactory implements Callback<TableColumn<CurrencyPairTableRow, CurrencyPairTableRow>, TableCell<CurrencyPairTableRow, CurrencyPairTableRow>> {
+        @Override
+        public TableCell<CurrencyPairTableRow, CurrencyPairTableRow> call(TableColumn<CurrencyPairTableRow, CurrencyPairTableRow> param) {
+            try {
+                return new SignalHistoryChartTableCell(30, dataService);
+            } catch (Exception e) {
+                LOGGER.warning("Fehler beim Erstellen der 30-Tage Chart-Zelle: " + e.getMessage());
+                // Fallback: Leere Zelle mit Fehlermeldung
+                return new TableCell<CurrencyPairTableRow, CurrencyPairTableRow>() {
+                    @Override
+                    protected void updateItem(CurrencyPairTableRow item, boolean empty) {
+                        super.updateItem(item, empty);
+                        if (empty || item == null) {
+                            setText("");
+                        } else {
+                            setText("❌ 30T");
+                        }
+                    }
+                };
+            }
+        }
+    }
     /**
      * Erstellt den Placeholder für leere Tabelle mit allen Features inkl. E-Mail
      */
@@ -508,19 +580,26 @@ public class MainWindowController {
         historicalHint.setFont(Font.font(10));
         historicalHint.getStyleClass().add("placeholder-hint-small");
         
-        // *** NEU: E-Mail-Hinweis ***
+        // NEU: E-Mail-Hinweis
         Label emailHint = new Label("📧 E-Mail-Benachrichtigungen: Konfiguration über E-Mail-Button");
         emailHint.setFont(Font.font(10));
         emailHint.getStyleClass().add("placeholder-hint-small");
         
-        // *** NEU: Erweiterte Ansicht Hinweis ***
-        Label extendedHint = new Label("📏 ERWEITERTE ANSICHT: 50% längere Balken, 30% größeres Fenster");
+        // NEU: Chart-Hinweis
+        Label chartHint = new Label("📈 MINI-CHARTS: 7T/30T Spalten zeigen Signalverläufe mit Wechselpunkten");
+        chartHint.setFont(Font.font(10));
+        chartHint.getStyleClass().add("placeholder-hint-small");
+        chartHint.setStyle("-fx-text-fill: #2E86AB; -fx-font-weight: bold;");
+        
+        // NEU: Erweiterte Ansicht Hinweis
+        Label extendedHint = new Label("🔍 ERWEITERTE ANSICHT: 50% längere Balken, 30% größeres Fenster + Mini-Charts");
         extendedHint.setFont(Font.font(10));
         extendedHint.getStyleClass().add("placeholder-hint-small");
         extendedHint.setStyle("-fx-text-fill: #2E86AB; -fx-font-weight: bold;");
         
         placeholder.getChildren().addAll(placeholderText, placeholderHint, dataDirectoryHint, 
-                                       storageHint, changeHint, historicalHint, emailHint, extendedHint);
+                                       storageHint, changeHint, historicalHint, emailHint, 
+                                       chartHint, extendedHint);
         return placeholder;
     }
     
@@ -540,7 +619,7 @@ public class MainWindowController {
         Separator separator1 = new Separator();
         separator1.setOrientation(javafx.geometry.Orientation.VERTICAL);
         
-        Label appDescription = new Label("Sentiment + Signalwechsel + Historische Daten + E-Mail-Benachrichtigungen + ERWEITERTE ANSICHT");
+        Label appDescription = new Label("Sentiment + Signalwechsel + Historische Daten + E-Mail + MINI-CHARTS (7T/30T)");
         appDescription.setFont(Font.font(10));
         appDescription.getStyleClass().add("app-description");
         
@@ -555,15 +634,14 @@ public class MainWindowController {
         Separator separator3 = new Separator();
         separator3.setOrientation(javafx.geometry.Orientation.VERTICAL);
         
-        Label storageInfo = new Label("Speicher: Täglich + Währungspaare + Signalwechsel + Historisch + E-Mail-Config + ERWEITERT");
+        Label storageInfo = new Label("Speicher: Täglich + Währungspaare + Signalwechsel + Historisch + E-Mail + Charts");
         storageInfo.setFont(Font.font(10));
         storageInfo.getStyleClass().add("storage-info");
         
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        Label dataSource = new Label("Live + Historische Daten von FXSSI.com + E-Mail-Benachrichtigungen + 50% längere Balken");
-        dataSource.setFont(Font.font(10));
+        Label dataSource = new Label("Live + Historische Daten von FXSSI.com + E-Mail + MINI-CHARTS + 50% längere Balken");        dataSource.setFont(Font.font(10));
         dataSource.getStyleClass().add("data-source");
         
         bottomArea.getChildren().addAll(
@@ -728,8 +806,8 @@ public class MainWindowController {
             }
             
             LOGGER.info("Datenservice gestartet mit Datenverzeichnis: " + dataDirectory);
-            LOGGER.info("Alle Features aktiviert: Live-Daten + Signalwechsel + Historische Daten + E-Mail-Benachrichtigungen + ERWEITERTE ANSICHT");
-            
+            LOGGER.info("Alle Features aktiviert: Live-Daten + Signalwechsel + Historische Daten + E-Mail-Benachrichtigungen + MINI-CHARTS (7T/30T)");
+           
             // Zeige initiale Statistiken
             updateStorageStatistics();
             
@@ -813,6 +891,7 @@ public class MainWindowController {
                     
                     // Aktualisiere Signalwechsel-Zellen
                     refreshSignalChangeCells();
+                    refreshChartColumns();
                 });
                 
                 LOGGER.info("GUI-Refresh abgeschlossen: " + data.size() + " Datensätze + Signalwechsel + E-Mail-Check (ERWEITERTE ANSICHT)");
@@ -829,7 +908,20 @@ public class MainWindowController {
             }
         }).start();
     }
-    
+    private void refreshChartColumns() {
+        try {
+            Platform.runLater(() -> {
+                if (currencyTable != null) {
+                    // Force refresh der gesamten Tabelle um Chart-Updates zu triggern
+                    currencyTable.refresh();
+                    
+                    LOGGER.fine("Chart-Spalten refreshed");
+                }
+            });
+        } catch (Exception e) {
+            LOGGER.fine("Fehler beim Refreshen der Chart-Spalten: " + e.getMessage());
+        }
+    }
     /**
      * *** NEU: Sendet E-Mail-Benachrichtigungen für erkannte Signalwechsel ***
      */
@@ -933,11 +1025,10 @@ public class MainWindowController {
             GuiDataService.ExtendedDataStatistics stats = dataService.getExtendedDataStatistics();
             Set<String> availablePairs = dataService.getAvailableCurrencyPairs();
             
-            String storageText = String.format("Speicherung: %d tägl. Dateien, %d Währungspaare, Signalwechsel + Historisch + E-Mail aktiv + ERWEITERTE ANSICHT", 
+            String storageText = String.format("Speicherung: %d tägl. Dateien, %d Währungspaare, Signalwechsel + Charts + E-Mail aktiv", 
                 stats.getTotalFiles(), availablePairs.size());
             
             Platform.runLater(() -> {
-                // *** FIX: Null-Check hinzugefügt ***
                 if (storageInfoLabel != null) {
                     storageInfoLabel.setText(storageText);
                 }
