@@ -1,76 +1,80 @@
-# FXSSI Data Extractor - KlassenÃ¼bersicht
-# Generated: 2025-09-08
-# Version: 3.0.0
+# FXSSI Data Extractor - Klassenübersicht
+# Generated: 2025-09-10
+# Version: 3.1.0
 #
 # PROJECT DESCRIPTION:
-# FXSSI Data Extractor ist eine Java-Anwendung fÃ¼r automatisierte Extraktion von Forex-Sentiment-Daten von FXSSI.com. UnterstÃ¼tzt sowohl Console-Modus fÃ¼r stÃ¼ndliche Hintergrund-Datensammlung als auch JavaFX GUI fÃ¼r interaktives Live-Monitoring. Sammelt Current Ratio Daten fÃ¼r WÃ¤hrungspaare und speichert diese in strukturierten CSV-Dateien fÃ¼r weitere Analysen.
+# FXSSI Data Extractor ist eine Java-Anwendung für automatisierte Extraktion von Forex-Sentiment-Daten von FXSSI.com. Unterstützt sowohl Console-Modus für stündliche Hintergrund-Datensammlung als auch JavaFX GUI für interaktives Live-Monitoring. Sammelt Current Ratio Daten für Währungspaare und speichert diese in strukturierten CSV-Dateien für weitere Analysen.
 #
 # HAUPTFUNKTIONEN:
-# - Dual-Mode-UnterstÃ¼tzung: Console-Modus und JavaFX GUI-Modus mit Command-Line-Switching
-# - StÃ¼ndliche Extraktion von Forex-Sentiment-Daten (Buy/Sell-VerhÃ¤ltnisse) von FXSSI.com
+# - Dual-Mode-Unterstützung: Console-Modus und JavaFX GUI-Modus mit Command-Line-Switching
+# - Stündliche Extraktion von Forex-Sentiment-Daten (Buy/Sell-Verhältnisse) von FXSSI.com
 # - Interactive JavaFX GUI mit Live-Sentiment-Tabelle und konfigurierbarem Auto-Refresh (1-60 Min.)
-# - Custom TableCell-Komponenten fÃ¼r visuelle Ratio-Balken und Trading-Signal-Icons
-# - HTML-Parsing mit JSoup fÃ¼r robuste Datenextraktion
-# - Automatische CSV-Dateierstellung mit tÃ¤glicher Segmentierung
+# - Custom TableCell-Komponenten für visuelle Ratio-Balken und Trading-Signal-Icons
+# - HTML-Parsing mit JSoup für robuste Datenextraktion
+# - Automatische CSV-Dateierstellung mit täglicher Segmentierung
 # - Handelssignal-Generierung basierend auf Sentiment-Daten (Contrarian-Approach)
-# - Asynchrone Datenladung mit Caching-Mechanismus fÃ¼r GUI-Performance
-# - Scheduler-basierte AusfÃ¼hrung mit konfigurierbaren Intervallen
+# - Threshold-basierte E-Mail-Benachrichtigungen mit Anti-Spam-System
+# - Asynchrone Datenladung mit Caching-Mechanismus für GUI-Performance
+# - Scheduler-basierte Ausführung mit konfigurierbaren Intervallen
 # - Umfassende Dateiverwaltung mit Backup und Cleanup-Funktionen
 #
 # TECHNOLOGY STACK:
 # - Java 11+ mit java.util.logging und java.util.concurrent
-# - JavaFX fÃ¼r GUI-Framework mit programmatischer UI-Erstellung (ohne FXML)
-# - JSoup fÃ¼r Web-Scraping und HTML-Parsing
-# - ScheduledExecutorService fÃ¼r Zeitsteuerung (Console + GUI Auto-Refresh)
-# - CompletableFuture fÃ¼r asynchrone GUI-Operations
-# - CSV-Format fÃ¼r Datenexport mit UTF-8-Encoding
+# - JavaFX für GUI-Framework mit programmatischer UI-Erstellung (ohne FXML)
+# - JSoup für Web-Scraping und HTML-Parsing
+# - ScheduledExecutorService für Zeitsteuerung (Console + GUI Auto-Refresh)
+# - CompletableFuture für asynchrone GUI-Operations
+# - CSV-Format für Datenexport mit UTF-8-Encoding
 # - Regex-basierte Prozentangaben-Extraktion
+# - JavaMail API für GMX-E-Mail-Versendung
 #
 # ARCHITECTURE HIGHLIGHTS:
 # - Modulare Dual-Mode-Architektur mit geteilten Core-Komponenten
 # - Command-Line-Interface mit Argument-Parsing (--gui, --console, --help)
-# - Scheduler-Pattern fÃ¼r zeitgesteuerte Datensammlung
-# - Service-Layer-Pattern fÃ¼r GUI-Datenbereitstellung mit 2-Minuten-Caching
-# - Custom TableCell-Factory-Pattern fÃ¼r spezialisierte UI-Komponenten
-# - Facade-Pattern fÃ¼r Scraper-Komponente
+# - Scheduler-Pattern für zeitgesteuerte Datensammlung
+# - Service-Layer-Pattern für GUI-Datenbereitstellung mit 2-Minuten-Caching
+# - Custom TableCell-Factory-Pattern für spezialisierte UI-Komponenten
+# - Facade-Pattern für Scraper-Komponente
+# - Anti-Spam-Pattern mit Threshold-basierter E-Mail-Filterung
 # - Robuste Exception-Handling mit SafeTaskWrapper
-# - Thread-sichere AusfÃ¼hrung mit Daemon-Threads
+# - Thread-sichere Ausführung mit Daemon-Threads
 # - Fallback-Strategien mit Demo-Daten und gespeicherten Daten
-# - Graceful Shutdown-Mechanismen fÃ¼r beide Modi
+# - Graceful Shutdown-Mechanismen für beide Modi
 # 
 # Format: <Package>.<Class> | <Description>
 # ========================================================================
 ## Default Package
 FXSSIDataExtractor | Hauptklasse und Orchestrator. Dual-Mode-Support mit Command-Line-Parsing und Mode-Routing zwischen Console/GUI.
 ## Model Package
-model.CurrencyPairData | Datenmodell fÃ¼r WÃ¤hrungspaar-Sentiment mit Buy/Sell-Prozenten, Trading-Signal-Enum und CSV-Import/Export.
-model.SignalChangeEvent | Datenmodell fÃ¼r Signalwechsel-Ereignisse mit Wichtigkeits- und AktualitÃ¤tsbewertung. Speichert Informationen Ã¼ber Handelssignal-Ã„nderungen.
+model.CurrencyPairData | Datenmodell für Währungspaar-Sentiment mit Buy/Sell-Prozenten, Trading-Signal-Enum und CSV-Import/Export.
+model.SignalChangeEvent | Datenmodell für Signalwechsel-Ereignisse mit Wichtigkeits- und Aktualitätsbewertung. Speichert Informationen über Handelssignal-Änderungen.
 ## Scraper Package  
-scraper.FXSSIScraper | Web-Scraper fÃ¼r FXSSI Current Ratio Daten. JSoup-basiertes HTML-Parsing mit Fallback-Strategien.
+scraper.FXSSIScraper | Web-Scraper für FXSSI Current Ratio Daten. JSoup-basiertes HTML-Parsing mit Fallback-Strategien.
 ## Storage Package
-storage.DataFileManager | CSV-Dateiverwaltung mit tÃ¤glicher Segmentierung, Backup, Cleanup und Datenvalidierung.
-storage.CurrencyPairDataManager | Manager fÃ¼r wÃ¤hrungspaar-spezifische Datendateien. Erstellt fÃ¼r jedes WÃ¤hrungspaar eine eigene CSV-Datei zur kontinuierlichen Datenspeicherung.
-storage.SignalChangeHistoryManager | Manager fÃ¼r die Verwaltung und Speicherung von Signalwechsel-Ereignissen. Erkennt automatisch Signalwechsel und speichert sie persistent.
+storage.DataFileManager | CSV-Dateiverwaltung mit täglicher Segmentierung, Backup, Cleanup und Datenvalidierung.
+storage.CurrencyPairDataManager | Manager für währungspaar-spezifische Datendateien. Erstellt für jedes Währungspaar eine eigene CSV-Datei zur kontinuierlichen Datenspeicherung.
+storage.SignalChangeHistoryManager | Manager für die Verwaltung und Speicherung von Signalwechsel-Ereignissen. Erkennt automatisch Signalwechsel, speichert sie persistent und integriert Threshold-basierte E-Mail-Benachrichtigungen.
+storage.LastSentSignalManager | Anti-Spam-Manager für E-Mail-Benachrichtigungen. Verwaltet zuletzt gesendete Signale pro Währungspaar in lastsend.csv und verhindert E-Mail-Spam durch konfigurierbaren Threshold-Mechanismus.
 ## Scheduler Package
-scheduler.HourlyScheduler | Zeitsteuerung fÃ¼r stÃ¼ndliche AusfÃ¼hrung. ScheduledExecutorService mit SafeTaskWrapper fÃ¼r StabilitÃ¤t.
+scheduler.HourlyScheduler | Zeitsteuerung für stündliche Ausführung. ScheduledExecutorService mit SafeTaskWrapper für Stabilität.
 ## Notification Package
-notification.EmailConfig | Konfigurationsklasse fÃ¼r E-Mail-Einstellungen. Speichert und lÃ¤dt GMX-Server-Konfiguration und E-Mail-PrÃ¤ferenzen.
-notification.EmailService | Service-Klasse fÃ¼r E-Mail-Versendung bei Signalwechseln. UnterstÃ¼tzt GMX-Server und E-Mail-Limits zur Spam-Vermeidung.
+notification.EmailConfig | Konfigurationsklasse für E-Mail-Einstellungen. Speichert und lädt GMX-Server-Konfiguration, E-Mail-Präferenzen und Signal-Threshold-Einstellungen.
+notification.EmailService | Service-Klasse für E-Mail-Versendung bei Signalwechseln. Unterstützt GMX-Server, E-Mail-Limits zur Spam-Vermeidung und Threshold-basierte Anti-Spam-Filterung.
 ## GUI Application Package
-gui.FXSSIGuiApplication | JavaFX Application Entry Point. Hauptfenster-Setup, Error-Handling und ordnungsgemÃ¤ÃŸes Shutdown.
+gui.FXSSIGuiApplication | JavaFX Application Entry Point. Hauptfenster-Setup, Error-Handling und ordnungsgemäßes Shutdown.
 ## GUI Controller Package
-gui.MainWindowController | VollstÃ¤ndige JavaFX GUI-Controller ohne FXML. Programmatische UI-Erstellung mit Tabellen-Management.
+gui.MainWindowController | Vollständige JavaFX GUI-Controller ohne FXML. Programmatische UI-Erstellung mit Tabellen-Management.
 ## GUI Service Package
-gui.GuiDataService | Datenservice fÃ¼r GUI mit 2-Min-Caching, asynchroner Ladung und Fallback auf Demo-Daten.
+gui.GuiDataService | Datenservice für GUI mit 2-Min-Caching, asynchroner Ladung und Fallback auf Demo-Daten.
 ## GUI Refresh Package
-gui.DataRefreshManager | Auto-Refresh-Manager fÃ¼r GUI. Konfigurierbare Intervalle (1-60 Min.) und Thread-sichere AusfÃ¼hrung.
+gui.DataRefreshManager | Auto-Refresh-Manager für GUI. Konfigurierbare Intervalle (1-60 Min.) und Thread-sichere Ausführung.
 ## GUI Custom Cells Package
-gui.RatioBarTableCell | Custom TableCell fÃ¼r horizontale Buy/Sell-Ratio-Balken mit dynamischer Breitenanpassung.
-gui.SignalIconTableCell | Custom TableCell fÃ¼r Trading-Signal-Icons. KreisfÃ¶rmige Symbole mit Richtungspfeilen.
-gui.SignalChangeTableCell | Custom TableCell fÃ¼r Signalwechsel-Anzeige. Zeigt Icons mit AktualitÃ¤ts-Information und Ã¶ffnet bei Klick Detail-Popup.
+gui.RatioBarTableCell | Custom TableCell für horizontale Buy/Sell-Ratio-Balken mit dynamischer Breitenanpassung.
+gui.SignalIconTableCell | Custom TableCell für Trading-Signal-Icons. Kreisförmige Symbole mit Richtungspfeilen.
+gui.SignalChangeTableCell | Custom TableCell für Signalwechsel-Anzeige. Zeigt Icons mit Aktualitäts-Information und öffnet bei Klick Detail-Popup.
 ## GUI Windows Package
-gui.EmailConfigWindow | Konfigurationsfenster fÃ¼r E-Mail-Einstellungen. ErmÃ¶glicht Konfiguration von GMX-Server und Benachrichtigungseinstellungen.
-gui.HistoricalDataWindow | Popup-Fenster fÃ¼r historische CSV-Daten eines WÃ¤hrungspaares. LÃ¤dt Daten Ã¼ber GuiDataService mit Filteroptionen.
-gui.SignalChangeHistoryWindow | Popup-Fenster fÃ¼r detaillierte Signalwechsel-Historie. Zeigt Timeline und detaillierte Tabelle der Signalwechsel.
+gui.EmailConfigWindow | Konfigurationsfenster für E-Mail-Einstellungen. Ermöglicht Konfiguration von GMX-Server, Benachrichtigungseinstellungen und Signal-Threshold mit ausführlicher Funktionserklärung.
+gui.HistoricalDataWindow | Popup-Fenster für historische CSV-Daten eines Währungspaares. Lädt Daten über GuiDataService mit Filteroptionen.
+gui.SignalChangeHistoryWindow | Popup-Fenster für detaillierte Signalwechsel-Historie. Zeigt Timeline und detaillierte Tabelle der Signalwechsel.
 ## Test Package
-test.AppTest | Basis-Unit-Test-Klasse fÃ¼r JUnit-Tests.
+test.AppTest | Basis-Unit-Test-Klasse für JUnit-Tests.
