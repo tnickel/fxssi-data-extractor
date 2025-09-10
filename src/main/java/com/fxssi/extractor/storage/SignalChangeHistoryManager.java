@@ -2,6 +2,7 @@ package com.fxssi.extractor.storage;
 
 import com.fxssi.extractor.model.CurrencyPairData;
 import com.fxssi.extractor.model.SignalChangeEvent;
+import com.fxssi.extractor.notification.EmailService;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -23,9 +24,10 @@ import java.util.stream.Collectors;
 /**
  * Manager für die Verwaltung und Speicherung von Signalwechsel-Ereignissen
  * Erkennt automatisch Signalwechsel und speichert sie persistent
+ * ERWEITERT um EmailService-Integration mit Threshold-basierter E-Mail-Versendung
  * 
  * @author Generated for FXSSI Signal Change Detection
- * @version 1.0
+ * @version 1.1 - EmailService Integration mit Anti-Spam-Threshold
  */
 public class SignalChangeHistoryManager {
     
@@ -44,15 +46,19 @@ public class SignalChangeHistoryManager {
     private final ConcurrentHashMap<String, CurrencyPairData.TradingSignal> lastKnownSignals;
     private final ConcurrentHashMap<String, List<SignalChangeEvent>> changeHistoryCache;
     
+    // NEU: EmailService für Threshold-basierte Benachrichtigungen
+    private EmailService emailService;
+    private boolean emailNotificationsEnabled = false;
+    
     /**
-     * Konstruktor mit Standard-Datenverzeichnis
+     * Konstruktor mit Standard-Datenverzeichnis (ohne E-Mail)
      */
     public SignalChangeHistoryManager() {
         this("data");
     }
     
     /**
-     * Konstruktor mit konfigurierbarem Datenverzeichnis
+     * Konstruktor mit konfigurierbarem Datenverzeichnis (ohne E-Mail)
      * @param dataDirectory Pfad zum Hauptdatenverzeichnis
      */
     public SignalChangeHistoryManager(String dataDirectory) {
@@ -63,9 +69,51 @@ public class SignalChangeHistoryManager {
         
         this.lastKnownSignals = new ConcurrentHashMap<>();
         this.changeHistoryCache = new ConcurrentHashMap<>();
+        this.emailService = null;
+        this.emailNotificationsEnabled = false;
         
-        LOGGER.info("SignalChangeHistoryManager initialisiert für Verzeichnis: " + dataDirectory);
+        LOGGER.info("SignalChangeHistoryManager initialisiert für Verzeichnis: " + dataDirectory + " (ohne E-Mail)");
         LOGGER.info("Signalwechsel-Dateien werden gespeichert in: " + signalChangesPath.toAbsolutePath());
+    }
+    
+    /**
+     * NEU: Konstruktor mit EmailService für Threshold-basierte Benachrichtigungen
+     * @param dataDirectory Pfad zum Hauptdatenverzeichnis
+     * @param emailService EmailService für Benachrichtigungen
+     */
+    public SignalChangeHistoryManager(String dataDirectory, EmailService emailService) {
+        this.dataDirectory = dataDirectory;
+        this.signalChangesPath = Paths.get(dataDirectory, SIGNAL_CHANGES_SUBDIRECTORY);
+        this.historyFilePath = signalChangesPath.resolve(SIGNAL_CHANGES_FILE);
+        this.lastSignalsFilePath = signalChangesPath.resolve(LAST_SIGNALS_FILE);
+        
+        this.lastKnownSignals = new ConcurrentHashMap<>();
+        this.changeHistoryCache = new ConcurrentHashMap<>();
+        this.emailService = emailService;
+        this.emailNotificationsEnabled = (emailService != null);
+        
+        LOGGER.info("SignalChangeHistoryManager initialisiert für Verzeichnis: " + dataDirectory + 
+                   " (mit E-Mail-Benachrichtigungen: " + emailNotificationsEnabled + ")");
+        LOGGER.info("Signalwechsel-Dateien werden gespeichert in: " + signalChangesPath.toAbsolutePath());
+    }
+    
+    /**
+     * NEU: Setzt den EmailService für Benachrichtigungen
+     * @param emailService EmailService für Threshold-basierte Benachrichtigungen
+     */
+    public void setEmailService(EmailService emailService) {
+        this.emailService = emailService;
+        this.emailNotificationsEnabled = (emailService != null);
+        LOGGER.info("EmailService gesetzt - E-Mail-Benachrichtigungen: " + emailNotificationsEnabled);
+    }
+    
+    /**
+     * NEU: Aktiviert/Deaktiviert E-Mail-Benachrichtigungen
+     * @param enabled true = aktiviert, false = deaktiviert
+     */
+    public void setEmailNotificationsEnabled(boolean enabled) {
+        this.emailNotificationsEnabled = enabled && (emailService != null);
+        LOGGER.info("E-Mail-Benachrichtigungen " + (emailNotificationsEnabled ? "aktiviert" : "deaktiviert"));
     }
     
     /**
@@ -129,6 +177,7 @@ public class SignalChangeHistoryManager {
     
     /**
      * HAUPTMETHODE: Verarbeitet neue Währungsdaten und erkennt Signalwechsel
+     * ERWEITERT um Threshold-basierte E-Mail-Versendung
      * @param newData Liste der neuen Währungsdaten
      * @return Liste der erkannten Signalwechsel
      */
@@ -186,6 +235,26 @@ public class SignalChangeHistoryManager {
                 
                 // Speichere trotzdem aktuelle Signale falls neue Währungspaare hinzugekommen sind
                 saveLastKnownSignals();
+            }
+            
+            // NEU: THRESHOLD-BASIERTE E-MAIL-VERSENDUNG
+            if (emailNotificationsEnabled && emailService != null) {
+                try {
+                    LOGGER.fine("Prüfe Threshold-basierte E-Mail-Versendung für " + newData.size() + " Datensätze...");
+                    
+                    EmailService.EmailSendResult result = emailService.sendSignalChangeNotificationWithThreshold(newData);
+                    
+                    if (result.isSuccess()) {
+                        LOGGER.info("Threshold-E-Mail erfolgreich versendet: " + result.getMessage());
+                    } else {
+                        LOGGER.fine("Keine Threshold-E-Mail versendet: " + result.getMessage());
+                    }
+                    
+                } catch (Exception e) {
+                    LOGGER.log(Level.WARNING, "Fehler bei Threshold-E-Mail-Versendung: " + e.getMessage(), e);
+                }
+            } else {
+                LOGGER.fine("E-Mail-Benachrichtigungen deaktiviert oder EmailService nicht verfügbar");
             }
             
         } finally {
@@ -263,7 +332,7 @@ public class SignalChangeHistoryManager {
     }
     
     /**
-     * Gibt Statistiken über alle Signalwechsel zurück
+     * NEU: Gibt Statistiken über alle Signalwechsel UND E-Mail-Status zurück
      * @return Statistik-String
      */
     public String getSignalChangeStatistics() {
@@ -298,6 +367,21 @@ public class SignalChangeHistoryManager {
             for (SignalChangeEvent.SignalChangeImportance importance : SignalChangeEvent.SignalChangeImportance.values()) {
                 int count = changeCountPerImportance.getOrDefault(importance, 0);
                 stats.append("  ").append(importance.getIcon()).append(" ").append(importance.getDescription()).append(": ").append(count).append("\n");
+            }
+            
+            // NEU: E-Mail-Status
+            stats.append("\nE-Mail-Benachrichtigungen:\n");
+            stats.append("==========================\n");
+            stats.append("Status: ").append(emailNotificationsEnabled ? "Aktiviert" : "Deaktiviert").append("\n");
+            stats.append("EmailService: ").append(emailService != null ? "Verfügbar" : "Nicht verfügbar").append("\n");
+            
+            if (emailService != null) {
+                try {
+                    String emailStats = emailService.getEmailStatistics();
+                    stats.append("\n").append(emailStats);
+                } catch (Exception e) {
+                    stats.append("Fehler beim Abrufen der E-Mail-Statistiken: ").append(e.getMessage()).append("\n");
+                }
             }
             
             return stats.toString();
@@ -337,6 +421,15 @@ public class SignalChangeHistoryManager {
                 LOGGER.info("Keine alten Signalwechsel zum Bereinigen gefunden");
             }
             
+            // NEU: Bereinige auch LastSentSignalManager falls verfügbar
+            if (emailService != null) {
+                try {
+                    emailService.getLastSentSignalManager().cleanupOldEntries(daysToKeep);
+                } catch (Exception e) {
+                    LOGGER.log(Level.WARNING, "Fehler beim Bereinigen der LastSent-Daten: " + e.getMessage(), e);
+                }
+            }
+            
         } finally {
             managerLock.unlock();
         }
@@ -356,11 +449,39 @@ public class SignalChangeHistoryManager {
             lastKnownSignals.clear();
             changeHistoryCache.clear();
             
+            // NEU: EmailService shutdown (falls vorhanden)
+            if (emailService != null) {
+                try {
+                    emailService.shutdown();
+                    LOGGER.info("EmailService heruntergefahren");
+                } catch (Exception e) {
+                    LOGGER.log(Level.WARNING, "Fehler beim Herunterfahren des EmailService: " + e.getMessage(), e);
+                }
+            }
+            
             LOGGER.info("SignalChangeHistoryManager heruntergefahren");
             
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Fehler beim Herunterfahren des SignalChangeHistoryManager: " + e.getMessage(), e);
         }
+    }
+    
+    // ===== GETTER FÜR INTEGRATION =====
+    
+    /**
+     * NEU: Gibt den aktuellen EmailService zurück
+     * @return EmailService oder null
+     */
+    public EmailService getEmailService() {
+        return emailService;
+    }
+    
+    /**
+     * NEU: Prüft ob E-Mail-Benachrichtigungen aktiviert sind
+     * @return true wenn aktiviert und EmailService verfügbar
+     */
+    public boolean isEmailNotificationsEnabled() {
+        return emailNotificationsEnabled && emailService != null;
     }
     
     // ===== PRIVATE HILFSMETHODEN =====

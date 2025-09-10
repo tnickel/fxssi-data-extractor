@@ -9,6 +9,7 @@ import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import javax.mail.Authenticator;
 import javax.mail.Message;
@@ -19,14 +20,17 @@ import javax.mail.Transport;
 import javax.mail.internet.InternetAddress;
 import javax.mail.internet.MimeMessage;
 
+import com.fxssi.extractor.model.CurrencyPairData;
 import com.fxssi.extractor.model.SignalChangeEvent;
+import com.fxssi.extractor.storage.LastSentSignalManager;
 
 /**
  * Service-Klasse für E-Mail-Versendung bei Signalwechseln
  * Unterstützt GMX-Server und E-Mail-Limits zur Spam-Vermeidung
+ * ERWEITERT um Threshold-basierte Anti-Spam-Funktionalität
  * 
  * @author Generated for FXSSI Email Notifications
- * @version 1.0
+ * @version 1.1 - Anti-Spam mit Signal-Threshold
  */
 public class EmailService {
     
@@ -35,6 +39,7 @@ public class EmailService {
     
     private EmailConfig config;
     private Session mailSession;
+    private final LastSentSignalManager lastSentSignalManager; // NEU: Anti-Spam Manager
     
     // E-Mail-Limit-Tracking
     private final ConcurrentLinkedQueue<LocalDateTime> sentEmailTimes;
@@ -48,9 +53,28 @@ public class EmailService {
         this.config = config;
         this.sentEmailTimes = new ConcurrentLinkedQueue<>();
         this.emailsSentThisHour = new AtomicInteger(0);
+        this.lastSentSignalManager = new LastSentSignalManager(config.getDataDirectory()); // NEU
+        
+        // Initialisiere LastSentSignalManager
+        lastSentSignalManager.loadLastSentSignals(); // NEU
         
         initializeMailSession();
-        LOGGER.info("EmailService initialisiert für Server: " + config.getSmtpHost());
+        LOGGER.info("EmailService initialisiert für Server: " + config.getSmtpHost() + " (mit Anti-Spam-Threshold: " + config.getSignalChangeThreshold() + "%)");
+    }
+    
+    /**
+     * NEU: Konstruktor mit externem LastSentSignalManager (für Tests)
+     * @param config E-Mail-Konfiguration
+     * @param lastSentSignalManager Externer LastSentSignalManager
+     */
+    public EmailService(EmailConfig config, LastSentSignalManager lastSentSignalManager) {
+        this.config = config;
+        this.sentEmailTimes = new ConcurrentLinkedQueue<>();
+        this.emailsSentThisHour = new AtomicInteger(0);
+        this.lastSentSignalManager = lastSentSignalManager;
+        
+        initializeMailSession();
+        LOGGER.info("EmailService initialisiert mit externem LastSentSignalManager");
     }
     
     /**
@@ -60,7 +84,7 @@ public class EmailService {
     public void updateConfig(EmailConfig newConfig) {
         this.config = newConfig;
         initializeMailSession();
-        LOGGER.info("E-Mail-Konfiguration aktualisiert");
+        LOGGER.info("E-Mail-Konfiguration aktualisiert (Threshold: " + newConfig.getSignalChangeThreshold() + "%)");
     }
     
     /**
@@ -115,7 +139,68 @@ public class EmailService {
     }
     
     /**
-     * Sendet eine Signalwechsel-Benachrichtigung
+     * NEU: Hauptmethode für Signalwechsel-Benachrichtigungen mit Threshold-Prüfung
+     * Sendet nur E-Mails wenn der konfigurierte Threshold überschritten wird
+     * @param currencyPairData Liste der aktuellen Währungspaar-Daten
+     * @return Erfolgsmeldung oder Fehlermeldung
+     */
+    public EmailSendResult sendSignalChangeNotificationWithThreshold(List<CurrencyPairData> currencyPairData) {
+        if (!config.isEmailEnabled()) {
+            LOGGER.fine("E-Mail-Benachrichtigungen sind deaktiviert");
+            return new EmailSendResult(false, "E-Mail-Benachrichtigungen sind deaktiviert");
+        }
+        
+        if (currencyPairData == null || currencyPairData.isEmpty()) {
+            return new EmailSendResult(false, "Keine Währungsdaten zum Prüfen");
+        }
+        
+        // Filtere Signale die den Threshold überschreiten
+        List<CurrencyPairData> thresholdExceededData = filterSignalsAboveThreshold(currencyPairData);
+        
+        if (thresholdExceededData.isEmpty()) {
+            LOGGER.fine("Keine Signale überschreiten den konfigurierten Threshold von " + config.getSignalChangeThreshold() + "%");
+            return new EmailSendResult(false, "Kein Signal überschreitet den Threshold");
+        }
+        
+        // Prüfe E-Mail-Limit
+        if (!checkEmailLimit()) {
+            String limitMessage = "E-Mail-Limit erreicht (" + config.getMaxEmailsPerHour() + "/Stunde)";
+            LOGGER.warning(limitMessage);
+            return new EmailSendResult(false, limitMessage);
+        }
+        
+        try {
+            String subject = createThresholdSignalSubject(thresholdExceededData);
+            String body = createThresholdSignalEmailBody(thresholdExceededData);
+            
+            EmailSendResult result = sendEmail(subject, body, "Threshold-Signalwechsel-Benachrichtigung");
+            
+            if (result.isSuccess()) {
+                // Registriere alle gesendeten Signale beim LastSentSignalManager
+                for (CurrencyPairData data : thresholdExceededData) {
+                    lastSentSignalManager.recordSentSignal(
+                        data.getCurrencyPair(), 
+                        data.getTradingSignal(), 
+                        data.getBuyPercentage()
+                    );
+                }
+                
+                // Tracking für erfolgreich gesendete E-Mails
+                recordEmailSent();
+                LOGGER.info("Threshold-Signal-E-Mail erfolgreich gesendet für " + thresholdExceededData.size() + " Signale");
+            }
+            
+            return result;
+            
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Fehler beim Senden der Threshold-Signal-E-Mail: " + e.getMessage(), e);
+            return new EmailSendResult(false, "Fehler beim Senden: " + e.getMessage());
+        }
+    }
+    
+    /**
+     * ORIGINAL: Sendet eine Signalwechsel-Benachrichtigung (ohne Threshold-Prüfung)
+     * Wird für Kompatibilität beibehalten
      * @param signalChanges Liste der Signalwechsel
      * @return Erfolgsmeldung oder Fehlermeldung
      */
@@ -165,6 +250,31 @@ public class EmailService {
     }
     
     /**
+     * NEU: Filtert Signale die den konfigurierten Threshold überschreiten
+     */
+    private List<CurrencyPairData> filterSignalsAboveThreshold(List<CurrencyPairData> allData) {
+        double thresholdPercent = config.getSignalChangeThreshold();
+        
+        return allData.stream()
+            .filter(data -> {
+                boolean shouldSend = lastSentSignalManager.shouldSendEmail(
+                    data.getCurrencyPair(),
+                    data.getTradingSignal(),
+                    data.getBuyPercentage(),
+                    thresholdPercent
+                );
+                
+                if (shouldSend) {
+                    LOGGER.fine(String.format("Threshold überschritten für %s: %s bei %.1f%%",
+                        data.getCurrencyPair(), data.getTradingSignal().getDescription(), data.getBuyPercentage()));
+                }
+                
+                return shouldSend;
+            })
+            .collect(Collectors.toList());
+    }
+    
+    /**
      * Zentrale E-Mail-Versendungs-Methode
      */
     private EmailSendResult sendEmail(String subject, String body, String emailType) {
@@ -187,7 +297,7 @@ public class EmailService {
             message.setText(body, "UTF-8", "html");
             
             // Setze zusätzliche Header
-            message.setHeader("X-Mailer", "FXSSI Monitor v1.0");
+            message.setHeader("X-Mailer", "FXSSI Monitor v1.1");
             message.setSentDate(new java.util.Date());
             
             // Sende E-Mail
@@ -238,7 +348,7 @@ public class EmailService {
                         return false;
                 }
             })
-            .collect(java.util.stream.Collectors.toList());
+            .collect(Collectors.toList());
     }
     
     /**
@@ -270,6 +380,22 @@ public class EmailService {
     }
     
     /**
+     * NEU: Erstellt den Betreff für Threshold-Signal-E-Mails
+     */
+    private String createThresholdSignalSubject(List<CurrencyPairData> data) {
+        if (data.size() == 1) {
+            CurrencyPairData single = data.get(0);
+            return String.format("🔔 FXSSI Signal: %s %s (%.1f%%)", 
+                single.getCurrencyPair(), single.getTradingSignal().getDescription(), single.getBuyPercentage());
+        } else {
+            long buySignals = data.stream().filter(d -> d.getTradingSignal() == CurrencyPairData.TradingSignal.BUY).count();
+            long sellSignals = data.stream().filter(d -> d.getTradingSignal() == CurrencyPairData.TradingSignal.SELL).count();
+            
+            return String.format("🔔 FXSSI: %d Signale (🟢%d Buy, 🔴%d Sell)", data.size(), buySignals, sellSignals);
+        }
+    }
+    
+    /**
      * Erstellt den Betreff für Signalwechsel-E-Mails
      */
     private String createSignalChangeSubject(List<SignalChangeEvent> changes) {
@@ -291,6 +417,84 @@ public class EmailService {
     }
     
     /**
+     * NEU: Erstellt den E-Mail-Body für Threshold-Signale
+     */
+    private String createThresholdSignalEmailBody(List<CurrencyPairData> data) {
+        StringBuilder body = new StringBuilder();
+        
+        body.append("<!DOCTYPE html><html><head><meta charset='UTF-8'><title>FXSSI Threshold Signale</title></head><body>");
+        body.append("<div style='font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;'>");
+        
+        // Header
+        body.append("<h2 style='color: #2E86AB; border-bottom: 2px solid #2E86AB; padding-bottom: 10px;'>");
+        body.append("🔔 FXSSI Signal-Alarm (Threshold: " + config.getSignalChangeThreshold() + "%)</h2>");
+        
+        // Threshold-Info
+        body.append("<div style='background-color: #e3f2fd; padding: 15px; border-radius: 5px; margin: 20px 0;'>");
+        body.append("<h3 style='margin-top: 0; color: #1976d2;'>📊 Anti-Spam-Filterung aktiv:</h3>");
+        body.append("<p style='margin-bottom: 0;'>");
+        body.append("Diese E-Mail wird nur gesendet wenn Signale sich um mindestens <strong>");
+        body.append(config.getSignalChangeThreshold()).append("%</strong> geändert haben.");
+        body.append("</p>");
+        body.append("</div>");
+        
+        // Signale
+        body.append("<h3 style='color: #495057;'>📋 Aktuelle Signale über Threshold:</h3>");
+        body.append("<div style='background-color: #f8f9fa; padding: 10px; border-radius: 5px;'>");
+        
+        for (CurrencyPairData currencyData : data) {
+            String signalColor = getSignalColor(currencyData.getTradingSignal());
+            String signalIcon = getSignalIcon(currencyData.getTradingSignal());
+            
+            LastSentSignalManager.LastSentSignal lastSent = lastSentSignalManager.getLastSentSignal(currencyData.getCurrencyPair());
+            
+            body.append("<div style='border-left: 4px solid ").append(signalColor).append("; padding: 10px; margin: 10px 0; background-color: white;'>");
+            body.append("<h4 style='margin: 0 0 5px 0; color: ").append(signalColor).append(";'>");
+            body.append(signalIcon).append(" ").append(currencyData.getCurrencyPair()).append("</h4>");
+            
+            body.append("<p style='margin: 5px 0; font-size: 14px;'>");
+            body.append("<strong>Aktuelles Signal:</strong> ").append(currencyData.getTradingSignal().getDescription());
+            body.append(" (").append(String.format("%.1f", currencyData.getBuyPercentage())).append("% Buy)<br>");
+            
+            if (lastSent != null) {
+                double diff = Math.abs(currencyData.getBuyPercentage() - lastSent.getBuyPercentage());
+                body.append("<strong>Letzte E-Mail:</strong> ").append(lastSent.getSignal().getDescription());
+                body.append(" (").append(String.format("%.1f", lastSent.getBuyPercentage())).append("% Buy)<br>");
+                body.append("<strong>Änderung:</strong> ").append(String.format("%.1f", diff)).append("% ");
+                body.append("(Threshold: ").append(config.getSignalChangeThreshold()).append("%)");
+            } else {
+                body.append("<strong>Status:</strong> Erste E-Mail für dieses Währungspaar");
+            }
+            body.append("</p>");
+            body.append("</div>");
+        }
+        
+        body.append("</div>");
+        
+        // LastSent Statistiken
+        body.append("<div style='background-color: #f1f3f4; padding: 15px; border-radius: 5px; margin: 20px 0;'>");
+        body.append("<h3 style='margin-top: 0; color: #5f6368;'>📈 Anti-Spam-Statistiken:</h3>");
+        body.append("<ul style='margin-bottom: 0;'>");
+        body.append("<li>Überwachte Währungspaare: ").append(lastSentSignalManager.getStatistics().split("Überwachte Währungspaare: ")[1].split("\n")[0]).append("</li>");
+        body.append("<li>Konfigurierter Threshold: ").append(config.getSignalChangeThreshold()).append("%</li>");
+        body.append("<li>Diese E-Mail wurde gesendet weil alle Signale den Threshold überschritten haben</li>");
+        body.append("</ul>");
+        body.append("</div>");
+        
+        // Footer
+        body.append("<p style='margin-top: 30px; color: #6c757d; font-size: 12px; text-align: center; border-top: 1px solid #dee2e6; padding-top: 15px;'>");
+        body.append("Diese Benachrichtigung wurde am ").append(LocalDateTime.now().format(EMAIL_TIME_FORMATTER));
+        body.append(" automatisch von FXSSI Monitor gesendet.<br>");
+        body.append("E-Mail-Zähler: ").append(emailsSentThisHour.get()).append("/").append(config.getMaxEmailsPerHour()).append(" pro Stunde<br>");
+        body.append("Anti-Spam-Threshold: ").append(config.getSignalChangeThreshold()).append("% aktiviert");
+        body.append("</p>");
+        
+        body.append("</div></body></html>");
+        
+        return body.toString();
+    }
+    
+    /**
      * Erstellt den E-Mail-Body für Test-E-Mails
      */
     private String createTestEmailBody() {
@@ -305,7 +509,7 @@ public class EmailService {
         body.append("<p>Diese Test-E-Mail bestätigt, dass Ihre E-Mail-Konfiguration korrekt funktioniert.</p>");
         
         body.append("<div style='background-color: #f8f9fa; padding: 15px; border-radius: 5px; margin: 20px 0;'>");
-        body.append("<h3 style='margin-top: 0; color: #495057;'>📧 Konfiguration:</h3>");
+        body.append("<h3 style='margin-top: 0; color: #495057;'>🔧 Konfiguration:</h3>");
         body.append("<ul style='margin-bottom: 0;'>");
         body.append("<li><strong>Server:</strong> ").append(config.getSmtpHost()).append(":").append(config.getSmtpPort()).append("</li>");
         body.append("<li><strong>Verschlüsselung:</strong> ").append(config.isUseStartTLS() ? "STARTTLS" : (config.isUseSSL() ? "SSL" : "Keine")).append("</li>");
@@ -321,6 +525,7 @@ public class EmailService {
         body.append("<li>Hohe Wichtigkeit: ").append(config.isSendOnHighChanges() ? "✅ Aktiviert" : "❌ Deaktiviert").append("</li>");
         body.append("<li>Alle Wechsel: ").append(config.isSendOnAllChanges() ? "✅ Aktiviert" : "❌ Deaktiviert").append("</li>");
         body.append("<li>Max. E-Mails/Stunde: ").append(config.getMaxEmailsPerHour()).append("</li>");
+        body.append("<li><strong>Signal-Threshold: ").append(config.getSignalChangeThreshold()).append("% (NEU!)</strong></li>"); // NEU
         body.append("</ul>");
         body.append("</div>");
         
@@ -418,6 +623,30 @@ public class EmailService {
     }
     
     /**
+     * NEU: Gibt die Farbe für ein Trading-Signal zurück
+     */
+    private String getSignalColor(CurrencyPairData.TradingSignal signal) {
+        switch (signal) {
+            case BUY: return "#4caf50";      // Grün
+            case SELL: return "#f44336";     // Rot
+            case NEUTRAL: return "#ff9800";  // Orange
+            default: return "#9e9e9e";       // Grau
+        }
+    }
+    
+    /**
+     * NEU: Gibt das Icon für ein Trading-Signal zurück
+     */
+    private String getSignalIcon(CurrencyPairData.TradingSignal signal) {
+        switch (signal) {
+            case BUY: return "🟢";
+            case SELL: return "🔴";
+            case NEUTRAL: return "🟡";
+            default: return "⚪";
+        }
+    }
+    
+    /**
      * Gibt die Farbe für eine Wichtigkeitsstufe zurück
      */
     private String getImportanceColor(SignalChangeEvent.SignalChangeImportance importance) {
@@ -461,7 +690,7 @@ public class EmailService {
     }
     
     /**
-     * Gibt die aktuelle E-Mail-Statistik zurück
+     * NEU: Gibt die aktuelle E-Mail-Statistik inklusive Threshold-Info zurück
      */
     public String getEmailStatistics() {
         StringBuilder stats = new StringBuilder();
@@ -471,8 +700,17 @@ public class EmailService {
         stats.append("Server: ").append(config.getSmtpHost()).append(":").append(config.getSmtpPort()).append("\n");
         stats.append("E-Mails diese Stunde: ").append(emailsSentThisHour.get()).append("/").append(config.getMaxEmailsPerHour()).append("\n");
         stats.append("Warteschlange: ").append(sentEmailTimes.size()).append(" Einträge\n");
+        stats.append("Signal-Threshold: ").append(config.getSignalChangeThreshold()).append("%\n"); // NEU
+        stats.append("\n").append(lastSentSignalManager.getStatistics()); // NEU
         
         return stats.toString();
+    }
+    
+    /**
+     * NEU: Getter für LastSentSignalManager (für Tests/Debug)
+     */
+    public LastSentSignalManager getLastSentSignalManager() {
+        return lastSentSignalManager;
     }
     
     /**
@@ -482,6 +720,7 @@ public class EmailService {
         LOGGER.info("Fahre EmailService herunter...");
         sentEmailTimes.clear();
         emailsSentThisHour.set(0);
+        lastSentSignalManager.shutdown(); // NEU
         LOGGER.info("EmailService heruntergefahren");
     }
     

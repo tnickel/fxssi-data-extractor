@@ -19,9 +19,10 @@ import java.util.logging.Logger;
 /**
  * Konfigurationsfenster für E-Mail-Einstellungen
  * Ermöglicht die Konfiguration von GMX-Server und Benachrichtigungspräferenzen
+ * ERWEITERT um Signal-Threshold Anti-Spam-Konfiguration
  * 
  * @author Generated for FXSSI Email Configuration
- * @version 1.0
+ * @version 1.1 - Signal-Threshold Integration
  */
 public class EmailConfigWindow {
     
@@ -50,6 +51,11 @@ public class EmailConfigWindow {
     private CheckBox highChangesCheckBox;
     private CheckBox allChangesCheckBox;
     private Spinner<Integer> maxEmailsSpinner;
+    
+    // NEU: UI-Komponenten - Signal-Threshold Anti-Spam
+    private Spinner<Double> signalThresholdSpinner;
+    private Button thresholdHelpButton;
+    private Label thresholdExampleLabel;
     
     // UI-Komponenten - Buttons
     private Button gmxDefaultsButton;
@@ -94,10 +100,10 @@ public class EmailConfigWindow {
         stage.initModality(Modality.WINDOW_MODAL);
         stage.initOwner(parentStage);
         stage.setTitle("E-Mail-Konfiguration - FXSSI Monitor");
-        stage.setWidth(700);
-        stage.setHeight(800);
-        stage.setMinWidth(600);
-        stage.setMinHeight(600);
+        stage.setWidth(750);  // Breiter wegen neuer Inhalte
+        stage.setHeight(900); // Höher wegen Threshold-Erklärung
+        stage.setMinWidth(650);
+        stage.setMinHeight(700);
         
         // Zentriere relativ zum Parent
         if (parentStage != null) {
@@ -122,7 +128,7 @@ public class EmailConfigWindow {
         scene = new Scene(root);
         stage.setScene(scene);
         
-        LOGGER.info("E-Mail-Konfigurationsfenster erstellt");
+        LOGGER.info("E-Mail-Konfigurationsfenster erstellt (mit Signal-Threshold)");
     }
     
     /**
@@ -131,11 +137,11 @@ public class EmailConfigWindow {
     private VBox createTopArea() {
         VBox topArea = new VBox(10);
         
-        Label titleLabel = new Label("📧 E-Mail-Konfiguration für Signalwechsel-Benachrichtigungen");
+        Label titleLabel = new Label("🔧 E-Mail-Konfiguration für Signalwechsel-Benachrichtigungen");
         titleLabel.setFont(Font.font("System", FontWeight.BOLD, 18));
         titleLabel.setStyle("-fx-text-fill: #2E86AB;");
         
-        Label descriptionLabel = new Label("Konfigurieren Sie GMX-Server und Benachrichtigungseinstellungen");
+        Label descriptionLabel = new Label("Konfigurieren Sie GMX-Server, Anti-Spam-Filter und Benachrichtigungseinstellungen");
         descriptionLabel.setFont(Font.font(14));
         descriptionLabel.setStyle("-fx-text-fill: #666666;");
         
@@ -332,6 +338,7 @@ public class EmailConfigWindow {
     
     /**
      * Erstellt den Benachrichtigungskonfigurationsbereich
+     * ERWEITERT um Signal-Threshold Anti-Spam-Konfiguration
      */
     private TitledPane createNotificationConfigPane() {
         VBox notificationContent = new VBox(15);
@@ -344,11 +351,71 @@ public class EmailConfigWindow {
         criticalChangesCheckBox = new CheckBox("🚨 Kritischen Signalwechseln (BUY ↔ SELL)");
         criticalChangesCheckBox.setStyle("-fx-text-fill: #dc3545;");
         
-        highChangesCheckBox = new CheckBox("⚠️ Wichtigen Signalwechseln (BUY/SELL ↔ NEUTRAL)");
+        highChangesCheckBox = new CheckBox("⚠️ Wichtigen Signalwechseln (BUY/SELL → NEUTRAL)");
         highChangesCheckBox.setStyle("-fx-text-fill: #fd7e14;");
         
         allChangesCheckBox = new CheckBox("🔄 Allen Signalwechseln");
         allChangesCheckBox.setStyle("-fx-text-fill: #6c757d;");
+        
+        // Trennlinie vor Anti-Spam-Bereich
+        Separator antiSpamSeparator = new Separator();
+        
+        // NEU: Anti-Spam-Überschrift
+        Label antiSpamLabel = new Label("🛡️ Anti-Spam-Filter (Signal-Threshold):");
+        antiSpamLabel.setFont(Font.font("System", FontWeight.BOLD, 12));
+        antiSpamLabel.setStyle("-fx-text-fill: #6f42c1;");
+        
+        // NEU: Signal-Threshold Konfiguration
+        HBox thresholdBox = new HBox(10);
+        thresholdBox.setAlignment(Pos.CENTER_LEFT);
+        Label thresholdLabel = new Label("Mindest-Änderung:");
+        thresholdLabel.setPrefWidth(150);
+        
+        signalThresholdSpinner = new Spinner<>(0.1, 50.0, 3.0, 0.1);
+        signalThresholdSpinner.setPrefWidth(80);
+        signalThresholdSpinner.setEditable(true);
+        signalThresholdSpinner.valueProperty().addListener((obs, oldVal, newVal) -> updateThresholdExample());
+        
+        Label percentLabel = new Label("%");
+        percentLabel.setStyle("-fx-font-weight: bold;");
+        
+        // NEU: Hilfe-Button für ausführliche Erklärung
+        thresholdHelpButton = new Button("📖 Hilfe");
+        thresholdHelpButton.setOnAction(e -> showThresholdHelp());
+        thresholdHelpButton.setStyle("-fx-background-color: #17a2b8; -fx-text-fill: white;");
+        
+        thresholdBox.getChildren().addAll(thresholdLabel, signalThresholdSpinner, percentLabel, thresholdHelpButton);
+        
+        // NEU: Tooltip mit kompakter Erklärung
+        Tooltip thresholdTooltip = new Tooltip();
+        thresholdTooltip.setWrapText(true);
+        thresholdTooltip.setPrefWidth(400);
+        thresholdTooltip.setStyle("-fx-font-size: 11px;");
+        signalThresholdSpinner.setTooltip(thresholdTooltip);
+        
+        // NEU: Beispiel-Label das sich dynamisch aktualisiert
+        thresholdExampleLabel = new Label();
+        thresholdExampleLabel.setStyle("-fx-text-fill: #495057; -fx-font-size: 11px; -fx-padding: 5 0 0 150;");
+        thresholdExampleLabel.setWrapText(true);
+        
+        // NEU: Info-Box mit wichtigsten Informationen
+        VBox thresholdInfoBox = new VBox(8);
+        thresholdInfoBox.setStyle("-fx-background-color: #f8f9fa; -fx-padding: 10; -fx-border-color: #dee2e6; -fx-border-width: 1;");
+        
+        Label infoTitle = new Label("💡 Wie funktioniert der Anti-Spam-Filter?");
+        infoTitle.setFont(Font.font("System", FontWeight.BOLD, 11));
+        
+        Label info1 = new Label("• Verhindert E-Mail-Spam bei Signal-Schwankungen um 55%-Marke");
+        Label info2 = new Label("• E-Mail wird nur gesendet wenn Änderung ≥ Threshold");
+        Label info3 = new Label("• Letzte gesendete Signale werden in CSV gespeichert:");
+        Label info4 = new Label("  " + dataDirectory + "/signal_changes/lastsend.csv");
+        
+        info1.setStyle("-fx-font-size: 11px;");
+        info2.setStyle("-fx-font-size: 11px;");
+        info3.setStyle("-fx-font-size: 11px;");
+        info4.setStyle("-fx-font-size: 11px; -fx-text-fill: #666666; -fx-font-family: 'Courier New', monospace;");
+        
+        thresholdInfoBox.getChildren().addAll(infoTitle, info1, info2, info3, info4);
         
         // E-Mail-Limit
         HBox limitBox = new HBox(10);
@@ -366,6 +433,7 @@ public class EmailConfigWindow {
         
         notificationContent.getChildren().addAll(
             typeLabel, criticalChangesCheckBox, highChangesCheckBox, allChangesCheckBox, 
+            antiSpamSeparator, antiSpamLabel, thresholdBox, thresholdExampleLabel, thresholdInfoBox,
             new Separator(), limitBox
         );
         
@@ -395,7 +463,7 @@ public class EmailConfigWindow {
         statusArea.setPrefHeight(120);
         statusArea.setEditable(false);
         statusArea.setStyle("-fx-font-family: 'Courier New', monospace; -fx-font-size: 11px;");
-        statusArea.setText("Bereit für Konfiguration...\n\nHinweise:\n- GMX benötigt STARTTLS auf Port 587\n- Verwenden Sie Ihre vollständige E-Mail-Adresse als Benutzername");
+        statusArea.setText("Bereit für Konfiguration...\n\nHinweise:\n- GMX benötigt STARTTLS auf Port 587\n- Verwenden Sie Ihre vollständige E-Mail-Adresse als Benutzername\n- Signal-Threshold verhindert E-Mail-Spam bei Schwankungen");
         
         statusContent.getChildren().addAll(progressBox, statusArea);
         
@@ -427,6 +495,7 @@ public class EmailConfigWindow {
     
     /**
      * Lädt die bestehende Konfiguration in die UI-Felder
+     * ERWEITERT um Signal-Threshold
      */
     private void loadConfigurationIntoFields() {
         // Server-Konfiguration
@@ -449,7 +518,72 @@ public class EmailConfigWindow {
         allChangesCheckBox.setSelected(emailConfig.isSendOnAllChanges());
         maxEmailsSpinner.getValueFactory().setValue(emailConfig.getMaxEmailsPerHour());
         
-        LOGGER.info("Konfiguration in UI-Felder geladen");
+        // NEU: Signal-Threshold
+        signalThresholdSpinner.getValueFactory().setValue(emailConfig.getSignalChangeThreshold());
+        updateThresholdTooltipAndExample();
+        
+        LOGGER.info("Konfiguration in UI-Felder geladen (inkl. Threshold: " + emailConfig.getSignalChangeThreshold() + "%)");
+    }
+    
+    /**
+     * NEU: Aktualisiert Tooltip und Beispiel für Threshold (OHNE Rekursion)
+     */
+    private void updateThresholdTooltipAndExample() {
+        double threshold = signalThresholdSpinner.getValue();
+        
+        // Aktualisiere EmailConfig für korrekte Tooltip-Generierung
+        emailConfig.setSignalChangeThreshold(threshold);
+        
+        // Aktualisiere Tooltip
+        String tooltipText = emailConfig.getSignalThresholdTooltip();
+        signalThresholdSpinner.getTooltip().setText(tooltipText);
+        
+        // Aktualisiere Beispiel-Label
+        String example = String.format(
+            "Beispiel: Letzte E-Mail bei 55%% → Neue E-Mail erst ab %.1f%% oder %.1f%% (Differenz ≥ %.1f%%)",
+            55.0 + threshold, 55.0 - threshold, threshold
+        );
+        thresholdExampleLabel.setText(example);
+    }
+    
+    /**
+     * NEU: Wrapper-Methode für Spinner-Listener (ruft die Haupt-Update-Methode auf)
+     */
+    private void updateThresholdExample() {
+        updateThresholdTooltipAndExample();
+    }
+    
+    /**
+     * NEU: Zeigt das ausführliche Hilfe-Dialog für Signal-Threshold
+     */
+    private void showThresholdHelp() {
+        // Aktualisiere Konfiguration für korrekte Erklärung
+        updateConfigFromFields();
+        
+        Alert helpAlert = new Alert(Alert.AlertType.INFORMATION);
+        helpAlert.setTitle("Signal-Threshold Anti-Spam-System");
+        helpAlert.setHeaderText("🛡️ Ausführliche Funktionserklärung");
+        
+        // Verwende die ausführliche Erklärung aus EmailConfig
+        String explanation = emailConfig.getSignalThresholdExplanation();
+        
+        // Erstelle scrollbare TextArea für lange Erklärung
+        TextArea explanationArea = new TextArea(explanation);
+        explanationArea.setEditable(false);
+        explanationArea.setWrapText(true);
+        explanationArea.setPrefWidth(600);
+        explanationArea.setPrefHeight(500);
+        explanationArea.setStyle("-fx-font-family: 'Courier New', monospace; -fx-font-size: 11px;");
+        
+        // Setze die TextArea als Content
+        helpAlert.getDialogPane().setContent(explanationArea);
+        helpAlert.getDialogPane().setPrefWidth(650);
+        helpAlert.getDialogPane().setPrefHeight(600);
+        
+        // Zeige Dialog
+        helpAlert.showAndWait();
+        
+        LOGGER.info("Signal-Threshold Hilfe-Dialog angezeigt");
     }
     
     /**
@@ -526,13 +660,14 @@ public class EmailConfigWindow {
                     if (result.isSuccess()) {
                         appendStatus("📧 " + result.getMessage() + "\n");
                         appendStatus("- Test-E-Mail erfolgreich versendet\n");
-                        appendStatus("- Prüfen Sie Ihren Posteingang\n\n");
+                        appendStatus("- Prüfen Sie Ihren Posteingang\n");
+                        appendStatus("- Threshold: " + emailConfig.getSignalChangeThreshold() + "% konfiguriert\n\n");
                         
                         // Zeige Erfolgsmeldung
                         Alert alert = new Alert(Alert.AlertType.INFORMATION);
                         alert.setTitle("Test-E-Mail gesendet");
                         alert.setHeaderText("E-Mail erfolgreich versendet!");
-                        alert.setContentText("Die Test-E-Mail wurde an " + emailConfig.getToEmail() + " gesendet.\n\nPrüfen Sie Ihren Posteingang (auch Spam-Ordner).");
+                        alert.setContentText("Die Test-E-Mail wurde an " + emailConfig.getToEmail() + " gesendet.\n\nSignal-Threshold: " + emailConfig.getSignalChangeThreshold() + "%\n\nPrüfen Sie Ihren Posteingang (auch Spam-Ordner).");
                         alert.showAndWait();
                         
                     } else {
@@ -560,6 +695,7 @@ public class EmailConfigWindow {
     
     /**
      * Speichert die Konfiguration
+     * ERWEITERT um Signal-Threshold
      */
     private void saveConfiguration() {
         try {
@@ -585,16 +721,20 @@ public class EmailConfigWindow {
             
             appendStatus("💾 Konfiguration erfolgreich gespeichert\n");
             appendStatus("- E-Mail-Benachrichtigungen: " + (emailConfig.isEmailEnabled() ? "Aktiviert" : "Deaktiviert") + "\n");
-            appendStatus("- Server: " + emailConfig.getSmtpHost() + ":" + emailConfig.getSmtpPort() + "\n\n");
+            appendStatus("- Server: " + emailConfig.getSmtpHost() + ":" + emailConfig.getSmtpPort() + "\n");
+            appendStatus("- Signal-Threshold: " + emailConfig.getSignalChangeThreshold() + "%\n");
+            appendStatus("- CSV-Speicherort: " + dataDirectory + "/signal_changes/lastsend.csv\n\n");
             
-            LOGGER.info("E-Mail-Konfiguration erfolgreich gespeichert");
+            LOGGER.info("E-Mail-Konfiguration erfolgreich gespeichert (Threshold: " + emailConfig.getSignalChangeThreshold() + "%)");
             
             // Erfolgsmeldung
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
             alert.setTitle("Konfiguration gespeichert");
             alert.setHeaderText("E-Mail-Konfiguration erfolgreich gespeichert!");
-            alert.setContentText("Die Einstellungen wurden gespeichert und sind sofort aktiv.\n\nSignalwechsel-Benachrichtigungen: " + 
-                (emailConfig.isEmailEnabled() ? "Aktiviert" : "Deaktiviert"));
+            alert.setContentText("Die Einstellungen wurden gespeichert und sind sofort aktiv.\n\n" +
+                "Signal-Threshold: " + emailConfig.getSignalChangeThreshold() + "%\n" +
+                "Signalwechsel-Benachrichtigungen: " + (emailConfig.isEmailEnabled() ? "Aktiviert" : "Deaktiviert") + "\n" +
+                "CSV-Speicherort: " + dataDirectory + "/signal_changes/lastsend.csv");
             alert.showAndWait();
             
         } catch (Exception e) {
@@ -610,6 +750,7 @@ public class EmailConfigWindow {
     
     /**
      * Aktualisiert die Konfiguration aus den UI-Feldern
+     * ERWEITERT um Signal-Threshold
      */
     private void updateConfigFromFields() {
         // Server-Konfiguration
@@ -631,6 +772,9 @@ public class EmailConfigWindow {
         emailConfig.setSendOnHighChanges(highChangesCheckBox.isSelected());
         emailConfig.setSendOnAllChanges(allChangesCheckBox.isSelected());
         emailConfig.setMaxEmailsPerHour(maxEmailsSpinner.getValue());
+        
+        // NEU: Signal-Threshold
+        emailConfig.setSignalChangeThreshold(signalThresholdSpinner.getValue());
     }
     
     /**
