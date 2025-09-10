@@ -5,51 +5,71 @@ import com.fxssi.extractor.model.CurrencyPairData;
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
 import javafx.geometry.Insets;
+import javafx.geometry.Orientation;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
+import javafx.scene.chart.LineChart;
+import javafx.scene.chart.NumberAxis;
+import javafx.scene.chart.XYChart;
 import javafx.scene.control.*;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
 import javafx.stage.Modality;
 import javafx.stage.Stage;
+import javafx.util.Callback;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 /**
- * Popup-Fenster für die Anzeige historischer CSV-Daten eines Währungspaares
- * Lädt die Daten über den GuiDataService und zeigt sie in einer detaillierten Tabelle an
+ * Erweiterte Popup-Fenster für die Anzeige historischer CSV-Daten mit Split-View
+ * Links: Scrollbare Tabelle mit allen historischen Daten
+ * Rechts: 7-Tage-Chart mit Buy-Percentage-Verlauf und Signalfarben
  * 
- * @author Generated for FXSSI Historical Data Display
- * @version 1.0
+ * @author Generated for FXSSI Historical Data Display with Chart Integration
+ * @version 2.0 - Split Window mit Chart-Integration
  */
 public class HistoricalDataWindow {
     
     private static final Logger LOGGER = Logger.getLogger(HistoricalDataWindow.class.getName());
     private static final DateTimeFormatter DATE_TIME_FORMATTER = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss");
     private static final DateTimeFormatter TIME_FORMATTER = DateTimeFormatter.ofPattern("HH:mm");
+    private static final DateTimeFormatter CHART_DATE_FORMATTER = DateTimeFormatter.ofPattern("dd.MM. HH:mm");
     
     private Stage stage;
     private Scene scene;
     private BorderPane root;
+    private SplitPane splitPane;
     
     // UI-Komponenten
     private Label titleLabel;
     private Label summaryLabel;
     private TableView<HistoricalDataTableRow> historicalTable;
     private ComboBox<DataRangeOption> dataRangeCombo;
+    private ComboBox<ChartRangeOption> chartRangeCombo;
     private Button refreshButton;
     private Button exportButton;
     private Button closeButton;
     private ProgressIndicator loadingIndicator;
     
+    // Chart-Komponenten
+    private LineChart<Number, Number> buyPercentageChart;
+    private NumberAxis chartXAxis;
+    private NumberAxis chartYAxis;
+    private Label chartTitleLabel;
+    
     // Daten
     private final String currencyPair;
     private final GuiDataService dataService;
     private ObservableList<HistoricalDataTableRow> tableData;
+    private List<CurrencyPairData> currentData;
     
     /**
      * Konstruktor
@@ -61,28 +81,29 @@ public class HistoricalDataWindow {
         this.currencyPair = currencyPair;
         this.dataService = dataService;
         this.tableData = FXCollections.observableArrayList();
+        this.currentData = FXCollections.observableArrayList();
         
         createWindow(parentStage);
         loadHistoricalData();
     }
     
     /**
-     * Erstellt und konfiguriert das Popup-Fenster
+     * Erstellt und konfiguriert das Popup-Fenster mit Split-Layout
      */
     private void createWindow(Stage parentStage) {
         stage = new Stage();
         stage.initModality(Modality.WINDOW_MODAL);
         stage.initOwner(parentStage);
-        stage.setTitle("Historische Daten: " + currencyPair);
-        stage.setWidth(900);
-        stage.setHeight(700);
-        stage.setMinWidth(700);
-        stage.setMinHeight(500);
+        stage.setTitle("Historische Daten & Chart: " + currencyPair);
+        stage.setWidth(1200);  // Breiter für Split-View
+        stage.setHeight(800);  // Höher für bessere Chart-Darstellung
+        stage.setMinWidth(900);
+        stage.setMinHeight(600);
         
         // Zentriere relativ zum Parent
         if (parentStage != null) {
-            stage.setX(parentStage.getX() + 50);
-            stage.setY(parentStage.getY() + 30);
+            stage.setX(parentStage.getX() + 25);
+            stage.setY(parentStage.getY() + 25);
         }
         
         // Erstelle Layout
@@ -91,7 +112,7 @@ public class HistoricalDataWindow {
         
         // Erstelle UI-Bereiche
         VBox topArea = createTopArea();
-        VBox centerArea = createCenterArea();
+        SplitPane centerArea = createSplitCenterArea();  // NEU: Split-Layout
         HBox bottomArea = createBottomArea();
         
         root.setTop(topArea);
@@ -102,11 +123,11 @@ public class HistoricalDataWindow {
         scene = new Scene(root);
         stage.setScene(scene);
         
-        LOGGER.info("Historische Daten-Fenster erstellt für: " + currencyPair);
+        LOGGER.info("Erweiterte historische Daten-Fenster mit Chart erstellt für: " + currencyPair);
     }
     
     /**
-     * Erstellt den oberen Bereich (Titel + Filter)
+     * Erstellt den oberen Bereich (Titel + Filter) - erweitert um Chart-Filter
      */
     private VBox createTopArea() {
         VBox topArea = new VBox(10);
@@ -115,7 +136,7 @@ public class HistoricalDataWindow {
         HBox titleArea = new HBox(15);
         titleArea.setAlignment(Pos.CENTER_LEFT);
         
-        titleLabel = new Label("📊 Historische Daten: " + currencyPair);
+        titleLabel = new Label("📊 Historische Daten & Chart: " + currencyPair);
         titleLabel.setFont(Font.font("System", FontWeight.BOLD, 18));
         
         Region spacer = new Region();
@@ -128,25 +149,42 @@ public class HistoricalDataWindow {
         
         titleArea.getChildren().addAll(titleLabel, spacer, loadingIndicator);
         
-        // Filter-Bereich
-        HBox filterArea = new HBox(10);
+        // Filter-Bereich (erweitert)
+        HBox filterArea = new HBox(15);
         filterArea.setAlignment(Pos.CENTER_LEFT);
         
-        Label filterLabel = new Label("Datenbereich:");
-        filterLabel.setFont(Font.font(12));
+        // Tabellen-Filter
+        Label tableFilterLabel = new Label("Tabelle:");
+        tableFilterLabel.setFont(Font.font(12));
         
         dataRangeCombo = new ComboBox<>();
         dataRangeCombo.getItems().addAll(DataRangeOption.values());
         dataRangeCombo.setValue(DataRangeOption.ALL);
         dataRangeCombo.setOnAction(e -> loadHistoricalData());
         
+        // NEU: Chart-Filter
+        Label chartFilterLabel = new Label("Chart:");
+        chartFilterLabel.setFont(Font.font(12));
+        
+        chartRangeCombo = new ComboBox<>();
+        chartRangeCombo.getItems().addAll(ChartRangeOption.values());
+        chartRangeCombo.setValue(ChartRangeOption.LAST_7_DAYS);
+        chartRangeCombo.setOnAction(e -> updateChart());
+        
+        // Buttons
         refreshButton = new Button("🔄 Aktualisieren");
         refreshButton.setOnAction(e -> loadHistoricalData());
         
         exportButton = new Button("📄 CSV Export");
         exportButton.setOnAction(e -> exportToCSV());
         
-        filterArea.getChildren().addAll(filterLabel, dataRangeCombo, refreshButton, exportButton);
+        filterArea.getChildren().addAll(
+            tableFilterLabel, dataRangeCombo, 
+            new Separator(Orientation.VERTICAL),
+            chartFilterLabel, chartRangeCombo,
+            new Separator(Orientation.VERTICAL),
+            refreshButton, exportButton
+        );
         
         // Summary-Bereich
         summaryLabel = new Label("Lade Daten...");
@@ -158,26 +196,123 @@ public class HistoricalDataWindow {
     }
     
     /**
-     * Erstellt den mittleren Bereich (Tabelle)
+     * NEU: Erstellt das Split-Layout für Tabelle und Chart
      */
-    private VBox createCenterArea() {
-        VBox centerArea = new VBox(10);
-        VBox.setVgrow(centerArea, Priority.ALWAYS);
+    private SplitPane createSplitCenterArea() {
+        splitPane = new SplitPane();
+        splitPane.setOrientation(Orientation.HORIZONTAL);
+        splitPane.setDividerPositions(0.5); // 50/50 Aufteilung
+        
+        // Linke Seite: Tabelle
+        VBox leftPane = createTablePane();
+        
+        // Rechte Seite: Chart
+        VBox rightPane = createChartPane();
+        
+        splitPane.getItems().addAll(leftPane, rightPane);
+        
+        // Verhindere zu kleine Bereiche
+        splitPane.setDividerPositions(0.5);
+        
+        return splitPane;
+    }
+    
+    /**
+     * NEU: Erstellt den Tabellen-Bereich (linke Seite)
+     */
+    private VBox createTablePane() {
+        VBox tablePane = new VBox(10);
+        tablePane.setPadding(new Insets(5));
+        VBox.setVgrow(tablePane, Priority.ALWAYS);
         
         // Tabellen-Header
-        Label tableTitle = new Label("💾 CSV-Daten aus Dateien: " + currencyPair.replace("/", "_") + ".csv");
+        Label tableTitle = new Label("📋 CSV-Daten: " + currencyPair.replace("/", "_") + ".csv");
         tableTitle.setFont(Font.font("System", FontWeight.BOLD, 14));
         
         // Historische Daten Tabelle
         historicalTable = createHistoricalDataTable();
         VBox.setVgrow(historicalTable, Priority.ALWAYS);
         
-        centerArea.getChildren().addAll(tableTitle, historicalTable);
-        return centerArea;
+        tablePane.getChildren().addAll(tableTitle, historicalTable);
+        return tablePane;
     }
     
     /**
-     * Erstellt die Tabelle für historische Daten
+     * NEU: Erstellt den Chart-Bereich (rechte Seite)
+     */
+    private VBox createChartPane() {
+        VBox chartPane = new VBox(10);
+        chartPane.setPadding(new Insets(5));
+        VBox.setVgrow(chartPane, Priority.ALWAYS);
+        
+        // Chart-Header
+        chartTitleLabel = new Label("📈 7-Tage-Verlauf: Buy-Percentage");
+        chartTitleLabel.setFont(Font.font("System", FontWeight.BOLD, 14));
+        
+        // Chart erstellen
+        buyPercentageChart = createBuyPercentageChart();
+        VBox.setVgrow(buyPercentageChart, Priority.ALWAYS);
+        
+        // Chart-Legende
+        Label chartLegend = new Label("🟢 Buy (< 40%)  🔴 Sell (> 60%)  ⚪ Neutral (40-60%)");
+        chartLegend.setFont(Font.font(10));
+        chartLegend.setStyle("-fx-text-fill: #666666;");
+        
+        chartPane.getChildren().addAll(chartTitleLabel, buyPercentageChart, chartLegend);
+        return chartPane;
+    }
+    
+    /**
+     * NEU: Erstellt den Buy-Percentage Chart
+     */
+    private LineChart<Number, Number> createBuyPercentageChart() {
+        // X-Achse (Zeit als Timestamp)
+        chartXAxis = new NumberAxis();
+        chartXAxis.setLabel("Zeit");
+        chartXAxis.setAutoRanging(true);
+        chartXAxis.setForceZeroInRange(false);
+        
+        // Y-Achse (Buy-Percentage)
+        chartYAxis = new NumberAxis(0, 100, 10);
+        chartYAxis.setLabel("Buy Percentage (%)");
+        chartYAxis.setAutoRanging(false);
+        
+        // Chart erstellen
+        LineChart<Number, Number> chart = new LineChart<>(chartXAxis, chartYAxis);
+        chart.setTitle("Buy-Percentage Verlauf");
+        chart.setCreateSymbols(true);
+        chart.setLegendVisible(false);
+        chart.getStylesheets().add("data:text/css," +
+            ".chart-series-line { -fx-stroke-width: 2px; }" +
+            ".chart-line-symbol { -fx-background-radius: 4px; -fx-padding: 4px; }"
+        );
+        
+        // Custom Tick Label Formatter für X-Achse
+        chartXAxis.setTickLabelFormatter(new javafx.util.StringConverter<Number>() {
+            @Override
+            public String toString(Number timestamp) {
+                if (timestamp == null) return "";
+                try {
+                    LocalDateTime dateTime = LocalDateTime.ofEpochSecond(
+                        timestamp.longValue(), 0, ZoneOffset.UTC
+                    );
+                    return dateTime.format(CHART_DATE_FORMATTER);
+                } catch (Exception e) {
+                    return timestamp.toString();
+                }
+            }
+            
+            @Override
+            public Number fromString(String string) {
+                return 0; // Nicht verwendet
+            }
+        });
+        
+        return chart;
+    }
+    
+    /**
+     * Erstellt die Tabelle für historische Daten (bestehende Funktionalität)
      */
     private TableView<HistoricalDataTableRow> createHistoricalDataTable() {
         TableView<HistoricalDataTableRow> table = new TableView<>();
@@ -211,11 +346,11 @@ public class HistoricalDataWindow {
         // Bemerkungen-Spalte
         TableColumn<HistoricalDataTableRow, String> notesColumn = new TableColumn<>("Bemerkungen");
         notesColumn.setCellValueFactory(new PropertyValueFactory<>("notes"));
-        notesColumn.setPrefWidth(200);
+        notesColumn.setPrefWidth(150);
         
         table.getColumns().addAll(timeColumn, buyColumn, sellColumn, signalColumn, changeColumn, notesColumn);
         
-        // Row-Factory für abwechselnde Farben
+        // Row-Factory für abwechselnde Farben und Highlight
         table.setRowFactory(tv -> {
             TableRow<HistoricalDataTableRow> row = new TableRow<HistoricalDataTableRow>() {
                 @Override
@@ -255,7 +390,163 @@ public class HistoricalDataWindow {
     }
     
     /**
-     * Erstellt den unteren Bereich (Buttons)
+     * NEU: Aktualisiert den Chart basierend auf aktuellen Daten und Filtereinstellung
+     */
+    private void updateChart() {
+        if (currentData == null || currentData.isEmpty()) {
+            buyPercentageChart.getData().clear();
+            return;
+        }
+        
+        try {
+            ChartRangeOption range = chartRangeCombo.getValue();
+            
+            // Filtere Daten nach gewähltem Zeitraum
+            List<CurrencyPairData> filteredData = filterDataForChart(currentData, range);
+            
+            if (filteredData.isEmpty()) {
+                buyPercentageChart.getData().clear();
+                chartTitleLabel.setText("📈 Keine Daten für " + range.getDescription());
+                return;
+            }
+            
+            // Sortiere Daten nach Zeit (älteste zuerst für Chart)
+            filteredData.sort((a, b) -> a.getTimestamp().compareTo(b.getTimestamp()));
+            
+            // Erstelle Chart-Serie
+            XYChart.Series<Number, Number> series = new XYChart.Series<>();
+            series.setName("Buy Percentage");
+            
+            for (CurrencyPairData data : filteredData) {
+                long timestamp = data.getTimestamp().toEpochSecond(ZoneOffset.UTC);
+                XYChart.Data<Number, Number> dataPoint = new XYChart.Data<>(timestamp, data.getBuyPercentage());
+                
+                // Custom Symbol basierend auf Trading Signal
+                dataPoint.nodeProperty().addListener((obs, oldNode, newNode) -> {
+                    if (newNode != null) {
+                        String symbolColor = getSignalColor(data.getTradingSignal());
+                        newNode.setStyle("-fx-background-color: " + symbolColor + "; -fx-background-radius: 6px;");
+                        
+                        // Tooltip mit genauer Zeit und Signal-Info
+                        Tooltip tooltip = new Tooltip(String.format(
+                            "%s\nBuy: %.1f%% | Sell: %.1f%%\nSignal: %s",
+                            data.getTimestamp().format(DATE_TIME_FORMATTER),
+                            data.getBuyPercentage(),
+                            data.getSellPercentage(),
+                            data.getTradingSignal().getDescription()
+                        ));
+                        Tooltip.install(newNode, tooltip);
+                    }
+                });
+                
+                series.getData().add(dataPoint);
+            }
+            
+            // Aktualisiere Chart
+            buyPercentageChart.getData().clear();
+            buyPercentageChart.getData().add(series);
+            
+            // Aktualisiere Chart-Titel
+            chartTitleLabel.setText(String.format("📈 %s (%d Datenpunkte)", 
+                range.getDescription(), filteredData.size()));
+            
+            // Aktualisiere X-Achsen-Bereich
+            if (filteredData.size() > 1) {
+                long minTime = filteredData.get(0).getTimestamp().toEpochSecond(ZoneOffset.UTC);
+                long maxTime = filteredData.get(filteredData.size() - 1).getTimestamp().toEpochSecond(ZoneOffset.UTC);
+                chartXAxis.setAutoRanging(false);
+                chartXAxis.setLowerBound(minTime);
+                chartXAxis.setUpperBound(maxTime);
+                chartXAxis.setTickUnit((maxTime - minTime) / 8.0); // ~8 Ticks
+            } else {
+                chartXAxis.setAutoRanging(true);
+            }
+            
+            LOGGER.info("Chart aktualisiert: " + filteredData.size() + " Datenpunkte für " + range.getDescription());
+            
+        } catch (Exception e) {
+            LOGGER.warning("Fehler beim Aktualisieren des Charts: " + e.getMessage());
+            chartTitleLabel.setText("📈 Fehler beim Laden der Chart-Daten");
+        }
+    }
+    
+    /**
+     * NEU: Filtert Daten für Chart basierend auf gewähltem Zeitraum
+     */
+    private List<CurrencyPairData> filterDataForChart(List<CurrencyPairData> data, ChartRangeOption range) {
+        LocalDateTime cutoff = LocalDateTime.now();
+        
+        switch (range) {
+            case LAST_24_HOURS:
+                cutoff = cutoff.minusHours(24);
+                break;
+            case LAST_3_DAYS:
+                cutoff = cutoff.minusDays(3);
+                break;
+            case LAST_7_DAYS:
+                cutoff = cutoff.minusDays(7);
+                break;
+            case LAST_14_DAYS:
+                cutoff = cutoff.minusDays(14);
+                break;
+            case LAST_30_DAYS:
+                cutoff = cutoff.minusDays(30);
+                break;
+            case ALL_DATA:
+            default:
+                return data; // Keine Filterung
+        }
+        
+        final LocalDateTime finalCutoff = cutoff;
+        return data.stream()
+                .filter(d -> d.getTimestamp().isAfter(finalCutoff))
+                .collect(Collectors.toList());
+    }
+    
+    /**
+     * KORRIGIERT: Gibt die KONSISTENTE Signalfarbe für Chart-Symbole zurück
+     * Exakt gleiche Farblogik wie in der Tabelle
+     */
+    private String getConsistentSignalColor(CurrencyPairData.TradingSignal signal) {
+        switch (signal) {
+            case BUY:
+                return "#4CAF50"; // Grün - wie grüne Tabellenzeilen
+            case SELL:
+                return "#f44336"; // Rot - wie rote Tabellenzeilen  
+            case NEUTRAL:
+                return "#9E9E9E"; // Grau - wie graue Tabellenzeilen
+            default:
+                return "#FF9800"; // Orange für UNKNOWN
+        }
+    }
+    
+    /**
+     * DEPRECATED: Alte Methode - wird durch getConsistentSignalColor ersetzt
+     * Nur für Kompatibilität falls noch Referenzen existieren
+     */
+    @Deprecated
+    private String getSignalColor(CurrencyPairData.TradingSignal signal) {
+        return getConsistentSignalColor(signal);
+    }
+    
+    /**
+     * NEU: Gibt Erklärung für Trading Signal zurück
+     */
+    private String getSignalExplanation(CurrencyPairData.TradingSignal signal) {
+        switch (signal) {
+            case BUY:
+                return "Buy < 40% - Contrarian Signal";
+            case SELL:
+                return "Buy > 60% - Contrarian Signal";
+            case NEUTRAL:
+                return "Buy 40-60% - Neutral Zone";
+            default:
+                return "Unbekanntes Signal";
+        }
+    }
+    
+    /**
+     * Erstellt den unteren Bereich (Buttons) - unverändert
      */
     private HBox createBottomArea() {
         HBox bottomArea = new HBox(10);
@@ -274,7 +565,7 @@ public class HistoricalDataWindow {
     }
     
     /**
-     * Lädt die historischen Daten basierend auf dem gewählten Filter
+     * Lädt die historischen Daten und aktualisiert Tabelle UND Chart
      */
     private void loadHistoricalData() {
         // Zeige Loading-Indikator
@@ -307,8 +598,15 @@ public class HistoricalDataWindow {
                 
                 // Aktualisiere UI im JavaFX Application Thread
                 javafx.application.Platform.runLater(() -> {
+                    // Speichere aktuelle Daten für Chart
+                    currentData = historicalData;
+                    
+                    // Aktualisiere Tabelle
                     updateTable(historicalData, range);
                     updateSummary(historicalData, range);
+                    
+                    // NEU: Aktualisiere Chart
+                    updateChart();
                     
                     loadingIndicator.setVisible(false);
                     refreshButton.setDisable(false);
@@ -329,7 +627,7 @@ public class HistoricalDataWindow {
     }
     
     /**
-     * Aktualisiert die Tabelle mit historischen Daten
+     * Aktualisiert die Tabelle mit historischen Daten (unverändert)
      */
     private void updateTable(List<CurrencyPairData> data, DataRangeOption range) {
         tableData.clear();
@@ -347,7 +645,7 @@ public class HistoricalDataWindow {
     }
     
     /**
-     * Aktualisiert die Zusammenfassung
+     * Aktualisiert die Zusammenfassung (unverändert)
      */
     private void updateSummary(List<CurrencyPairData> data, DataRangeOption range) {
         if (data.isEmpty()) {
@@ -373,7 +671,7 @@ public class HistoricalDataWindow {
     }
     
     /**
-     * Exportiert die Daten als CSV
+     * Exportiert die Daten als CSV (unverändert)
      */
     private void exportToCSV() {
         try {
@@ -413,7 +711,7 @@ public class HistoricalDataWindow {
     }
     
     /**
-     * Zeigt Statistiken an
+     * Zeigt Statistiken an (unverändert)
      */
     private void showStatistics() {
         try {
@@ -512,7 +810,7 @@ public class HistoricalDataWindow {
     // ===== INNERE KLASSEN =====
     
     /**
-     * Enum für Datenbereich-Filter
+     * Enum für Datenbereich-Filter (unverändert)
      */
     public enum DataRangeOption {
         LAST_100("Letzte 100 Einträge"),
@@ -533,7 +831,30 @@ public class HistoricalDataWindow {
     }
     
     /**
-     * Wrapper-Klasse für Tabellenzeilendaten
+     * NEU: Enum für Chart-Zeitraum-Filter
+     */
+    public enum ChartRangeOption {
+        LAST_24_HOURS("Letzte 24 Stunden"),
+        LAST_3_DAYS("Letzte 3 Tage"),
+        LAST_7_DAYS("Letzte 7 Tage"),
+        LAST_14_DAYS("Letzte 14 Tage"),
+        LAST_30_DAYS("Letzte 30 Tage"),
+        ALL_DATA("Alle Daten");
+        
+        private final String description;
+        
+        ChartRangeOption(String description) {
+            this.description = description;
+        }
+        
+        public String getDescription() { return description; }
+        
+        @Override
+        public String toString() { return description; }
+    }
+    
+    /**
+     * Wrapper-Klasse für Tabellenzeilendaten (unverändert)
      */
     public static class HistoricalDataTableRow {
         private final CurrencyPairData originalData;
