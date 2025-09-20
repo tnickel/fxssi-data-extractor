@@ -24,7 +24,7 @@ import com.fxssi.extractor.notification.EmailConfig;
  * Jetzt mit vollständiger E-Mail-Integration: tägliche UND währungspaar-spezifische Dateien UND Signalwechsel-Erkennung UND E-Mail-Benachrichtigungen
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.4 (mit vollständiger E-Mail-Integration)
+ * @version 1.5 (mit korrigierter E-Mail-Integration - Threshold-System aktiviert)
  */
 public class GuiDataService {
     
@@ -58,27 +58,29 @@ public class GuiDataService {
         this.dataDirectory = validateAndNormalizeDataDirectory(dataDirectory);
         this.cachedData = new ArrayList<>();
         LOGGER.info("GuiDataService erstellt mit Datenverzeichnis: " + this.dataDirectory);
-        LOGGER.info("Vierfache Integration aktiviert: Tägliche + Währungspaar-spezifische + Signalwechsel + E-Mail-Benachrichtigungen");
+        LOGGER.info("Vierfache Integration aktiviert: Tägliche + Währungspaar-spezifische + Signalwechsel + E-Mail-Benachrichtigungen mit Threshold-System");
     }
     
     /**
-     * Initialisiert den Datenservice mit E-Mail-Integration
+     * Initialisiert den Datenservice mit korrigierter E-Mail-Integration
      */
     public void initialize() {
         try {
-            LOGGER.info("Initialisiere GuiDataService mit E-Mail-Integration...");
+            LOGGER.info("Initialisiere GuiDataService mit korrigierter E-Mail-Integration...");
             LOGGER.info("Datenverzeichnis: " + dataDirectory);
             
             // Initialisiere Komponenten mit konfiguriertem Datenverzeichnis
             scraper = new FXSSIScraper(dataDirectory);
             fileManager = new DataFileManager(dataDirectory);
             currencyPairManager = new CurrencyPairDataManager(dataDirectory);
-            signalChangeManager = new SignalChangeHistoryManager(dataDirectory);
             
-            // *** NEU: E-Mail-Integration ***
+            // *** E-Mail-Integration ZUERST ***
             emailConfig = new EmailConfig(dataDirectory);
             emailConfig.loadConfig(); // Lade gespeicherte E-Mail-Konfiguration
             emailService = new EmailService(emailConfig);
+            
+            // *** KRITISCHE KORREKTUR: SignalChangeHistoryManager MIT EmailService erstellen ***
+            signalChangeManager = new SignalChangeHistoryManager(dataDirectory, emailService);
             
             // Erstelle Datenverzeichnisse
             fileManager.createDataDirectory();
@@ -96,7 +98,7 @@ public class GuiDataService {
             }
             
             isInitialized = true;
-            LOGGER.info("GuiDataService erfolgreich initialisiert mit vierfacher Integration UND E-Mail-Benachrichtigungen");
+            LOGGER.info("GuiDataService erfolgreich initialisiert mit korrigierter E-Mail-Integration und Threshold-System");
             
             // Logge initiale Statistiken inklusive E-Mail-Status
             logInitialStatisticsWithEmail();
@@ -109,7 +111,7 @@ public class GuiDataService {
     
     /**
      * Holt aktuelle Daten (mit Caching für Performance)
-     * WICHTIG: Speichert bei jedem Refresh in ALLE SYSTEME UND versendet E-Mail-Benachrichtigungen
+     * WICHTIG: Speichert bei jedem Refresh in ALLE SYSTEME mit automatischen Threshold-E-Mails
      */
     public List<CurrencyPairData> getCurrentData() throws Exception {
         if (!isInitialized) {
@@ -122,20 +124,20 @@ public class GuiDataService {
             return new ArrayList<>(cachedData);
         }
         
-        LOGGER.info("Lade frische Daten für GUI-Refresh mit E-Mail-Integration...");
+        LOGGER.info("Lade frische Daten für GUI-Refresh mit Threshold-E-Mail-System...");
         
         try {
             // Versuche neue Daten zu laden
             List<CurrencyPairData> freshData = scraper.extractCurrentRatioData();
             
             if (freshData != null && !freshData.isEmpty()) {
-                // SPEICHERE IN ALLE SYSTEME UND SENDE E-MAILS bei jedem Refresh
-                saveToAllSystemsAndSendEmails(freshData);
+                // SPEICHERE IN ALLE SYSTEME mit automatischen Threshold-E-Mails
+                saveToAllSystems(freshData);
                 
                 // Aktualisiere Cache
                 updateCache(freshData);
                 
-                LOGGER.info("GUI-Refresh: " + freshData.size() + " Datensätze geladen und in alle Speichersysteme + E-Mail-System integriert");
+                LOGGER.info("GUI-Refresh: " + freshData.size() + " Datensätze geladen und in alle Speichersysteme mit Threshold-E-Mail-System integriert");
                 return new ArrayList<>(freshData);
             } else {
                 // Fallback: Verwende gespeicherte Daten
@@ -152,7 +154,7 @@ public class GuiDataService {
     
     /**
      * Lädt Daten asynchron für bessere GUI-Performance
-     * WICHTIG: Speichert auch bei asynchronen Loads in alle Systeme mit E-Mail-Integration
+     * WICHTIG: Speichert auch bei asynchronen Loads in alle Systeme mit Threshold-E-Mail-System
      */
     public CompletableFuture<List<CurrencyPairData>> getCurrentDataAsync() {
         return CompletableFuture.supplyAsync(() -> {
@@ -167,10 +169,10 @@ public class GuiDataService {
     
     /**
      * Führt eine manuelle Datenaktualisierung durch (für Refresh-Button)
-     * GARANTIERT Speicherung in alle Systeme UND E-Mail-Benachrichtigungen
+     * GARANTIERT Speicherung in alle Systeme mit automatischen Threshold-E-Mails
      */
     public List<CurrencyPairData> forceDataRefresh() throws Exception {
-        LOGGER.info("Erzwinge manuelle Datenaktualisierung mit E-Mail-Integration...");
+        LOGGER.info("Erzwinge manuelle Datenaktualisierung mit Threshold-E-Mail-System...");
         
         // Invalidiere Cache
         invalidateCache();
@@ -179,13 +181,13 @@ public class GuiDataService {
         List<CurrencyPairData> freshData = scraper.extractCurrentRatioData();
         
         if (freshData != null && !freshData.isEmpty()) {
-            // GARANTIERTE Speicherung in alle Systeme mit E-Mail-Integration
-            saveToAllSystemsAndSendEmails(freshData);
+            // GARANTIERTE Speicherung in alle Systeme mit Threshold-E-Mail-System
+            saveToAllSystems(freshData);
             
             // Aktualisiere Cache
             updateCache(freshData);
             
-            LOGGER.info("Manuelle Aktualisierung: " + freshData.size() + " Datensätze in alle Speichersysteme + E-Mail-System integriert");
+            LOGGER.info("Manuelle Aktualisierung: " + freshData.size() + " Datensätze in alle Speichersysteme mit Threshold-E-Mail-System integriert");
             return freshData;
         } else {
             LOGGER.warning("Manuelle Aktualisierung: Keine neuen Daten erhalten");
@@ -194,23 +196,29 @@ public class GuiDataService {
     }
     
     /**
-     * *** ZENTRALE NEUE METHODE: Speichert Daten in ALLE SYSTEME UND versendet E-Mail-Benachrichtigungen ***
+     * *** KORRIGIERTE ZENTRALE METHODE: Speichert Daten in ALLE SYSTEME mit automatischen Threshold-E-Mails ***
+     * Der SignalChangeHistoryManager übernimmt jetzt die komplette E-Mail-Logik mit Threshold-System
      * @param data Die zu speichernden Daten
      */
-    private void saveToAllSystemsAndSendEmails(List<CurrencyPairData> data) {
+    private void saveToAllSystems(List<CurrencyPairData> data) {
         if (data == null || data.isEmpty()) {
-            LOGGER.warning("Keine Daten zum Speichern in allen Systemen mit E-Mail-Integration");
+            LOGGER.warning("Keine Daten zum Speichern in allen Systemen mit Threshold-E-Mail-System");
             return;
         }
         
         try {
-            LOGGER.fine("Speichere " + data.size() + " Datensätze in alle Speichersysteme, erkenne Signalwechsel UND versende E-Mail-Benachrichtigungen...");
+            LOGGER.fine("Speichere " + data.size() + " Datensätze in alle Speichersysteme mit automatischem Threshold-E-Mail-System...");
             
-            // 1. ERKENNE SIGNALWECHSEL (vor der Speicherung!)
+            // 1. ERKENNE SIGNALWECHSEL UND SENDE AUTOMATISCH THRESHOLD-E-MAILS
+            //    Der SignalChangeHistoryManager hat jetzt EmailService und macht alles automatisch:
+            //    - Signalwechsel erkennen
+            //    - Threshold-E-Mails senden (sendSignalChangeNotificationWithThreshold)
+            //    - recordSentSignal() aufrufen
+            //    - lastsend.csv aktualisieren
             List<SignalChangeEvent> detectedChanges = signalChangeManager.processNewData(data);
             
             if (!detectedChanges.isEmpty()) {
-                LOGGER.info("🚨 SIGNALWECHSEL ERKANNT: " + detectedChanges.size() + " Wechsel bei diesem Refresh!");
+                LOGGER.info("SIGNALWECHSEL ERKANNT: " + detectedChanges.size() + " Wechsel bei diesem Refresh!");
                 
                 for (SignalChangeEvent change : detectedChanges) {
                     LOGGER.info(String.format("   - %s: %s (Wichtigkeit: %s, Aktualität: %s)", 
@@ -220,9 +228,7 @@ public class GuiDataService {
                         change.getActuality().getDescription()
                     ));
                 }
-                
-                // *** NEU: E-MAIL-BENACHRICHTIGUNGEN FÜR SIGNALWECHSEL ***
-                sendSignalChangeEmailNotifications(detectedChanges);
+                LOGGER.info("E-Mail-Benachrichtigungen werden automatisch vom SignalChangeHistoryManager mit Threshold-System versendet");
             }
             
             // 2. SPEICHERE in tägliche Dateien
@@ -233,51 +239,18 @@ public class GuiDataService {
             currencyPairManager.appendDataForAllPairs(data);
             LOGGER.fine("✓ Daten in währungspaar-spezifische Dateien gespeichert");
             
-            // 4. Signalwechsel sind bereits durch processNewData() gespeichert
-            LOGGER.fine("✓ Signalwechsel erkannt und gespeichert");
+            // 4. Signalwechsel und E-Mails sind bereits durch processNewData() mit Threshold-System abgehandelt
+            LOGGER.fine("✓ Signalwechsel erkannt und Threshold-E-Mails automatisch versendet");
             
-            String logMessage = String.format("Erfolgreich %d Datensätze in ALLE SYSTEME (inkl. E-Mail) integriert", data.size());
+            String logMessage = String.format("Erfolgreich %d Datensätze in ALLE SYSTEME mit Threshold-E-Mail-System integriert", data.size());
             if (!detectedChanges.isEmpty()) {
-                logMessage += String.format(" | 🔄 %d Signalwechsel erkannt | 📧 E-Mail-Benachrichtigungen versendet", detectedChanges.size());
+                logMessage += String.format(" | 🔄 %d Signalwechsel erkannt | 📧 Threshold-E-Mails automatisch versendet", detectedChanges.size());
             }
             LOGGER.info(logMessage);
             
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "Fehler beim Speichern in alle Systeme mit E-Mail-Integration: " + e.getMessage(), e);
+            LOGGER.log(Level.SEVERE, "Fehler beim Speichern in alle Systeme mit Threshold-E-Mail-System: " + e.getMessage(), e);
             // Werfe Exception nicht weiter, da GUI weiter funktionieren soll
-        }
-    }
-    
-    /**
-     * *** NEUE METHODE: Versendet E-Mail-Benachrichtigungen für Signalwechsel ***
-     * @param signalChanges Liste der erkannten Signalwechsel
-     */
-    private void sendSignalChangeEmailNotifications(List<SignalChangeEvent> signalChanges) {
-        if (signalChanges == null || signalChanges.isEmpty()) {
-            return;
-        }
-        
-        try {
-            LOGGER.info("📧 Versuche E-Mail-Benachrichtigung für " + signalChanges.size() + " Signalwechsel zu versenden...");
-            
-            // Führe E-Mail-Versendung in separatem Thread aus (non-blocking)
-            CompletableFuture.runAsync(() -> {
-                try {
-                    EmailService.EmailSendResult result = emailService.sendSignalChangeNotification(signalChanges);
-                    
-                    if (result.isSuccess()) {
-                        LOGGER.info("✅ Signalwechsel-E-Mail erfolgreich versendet: " + result.getMessage());
-                    } else {
-                        LOGGER.warning("❌ E-Mail-Versendung fehlgeschlagen: " + result.getMessage());
-                    }
-                    
-                } catch (Exception e) {
-                    LOGGER.log(Level.WARNING, "Fehler bei E-Mail-Versendung: " + e.getMessage(), e);
-                }
-            });
-            
-        } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Fehler bei E-Mail-Benachrichtigung: " + e.getMessage(), e);
         }
     }
     
@@ -358,7 +331,12 @@ public class GuiDataService {
             this.emailConfig = newConfig;
             this.emailService.updateConfig(newConfig);
             
-            LOGGER.info("E-Mail-Konfiguration erfolgreich aktualisiert");
+            // *** WICHTIG: Aktualisiere auch den SignalChangeHistoryManager ***
+            if (signalChangeManager != null) {
+                signalChangeManager.setEmailService(emailService);
+            }
+            
+            LOGGER.info("E-Mail-Konfiguration erfolgreich aktualisiert und an SignalChangeHistoryManager weitergegeben");
             
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Fehler beim Aktualisieren der E-Mail-Konfiguration: " + e.getMessage(), e);
@@ -582,13 +560,13 @@ public class GuiDataService {
             // Signalwechsel-Statistiken
             String signalChangeStats = signalChangeManager.getSignalChangeStatistics();
             
-            // *** NEU: E-Mail-Statistiken ***
+            // E-Mail-Statistiken
             String emailStats = getEmailStatistics();
             
             String detailedStats = String.format(
                 "Tägliche Dateien: %s | Währungspaare: %d verfügbar | E-Mail: %s | Datenverzeichnis: %s",
                 dailyStats, availablePairs.size(), 
-                (emailConfig.isEmailEnabled() ? "Aktiviert" : "Deaktiviert"), 
+                (emailConfig.isEmailEnabled() ? "Aktiviert (Threshold-System)" : "Deaktiviert"), 
                 dataDirectory
             );
             
@@ -599,7 +577,7 @@ public class GuiDataService {
                 currencyPairStats,
                 availablePairs.size(),
                 signalChangeStats,
-                emailStats  // NEU: E-Mail-Statistiken
+                emailStats
             );
             
         } catch (Exception e) {
@@ -669,11 +647,11 @@ public class GuiDataService {
             report.append("SIGNALWECHSEL-DATEN:\n");
             report.append(signalChangeManager.getSignalChangeStatistics()).append("\n");
             
-            // *** NEU: Validiere E-Mail-Konfiguration ***
-            report.append("E-MAIL-KONFIGURATION:\n");
+            // Validiere E-Mail-Konfiguration
+            report.append("E-MAIL-KONFIGURATION (THRESHOLD-SYSTEM):\n");
             EmailConfig.ValidationResult emailValidation = emailConfig.validateConfig();
             if (emailValidation.isValid()) {
-                report.append("✓ E-Mail-Konfiguration ist gültig\n");
+                report.append("✓ E-Mail-Konfiguration ist gültig (Threshold-System aktiv)\n");
                 report.append(emailConfig.getConfigSummary());
             } else {
                 report.append("✗ E-Mail-Konfiguration ungültig:\n");
@@ -703,7 +681,7 @@ public class GuiDataService {
                 signalChangeManager.shutdown();
             }
             
-            // *** NEU: Fahre E-Mail-Service herunter ***
+            // Fahre E-Mail-Service herunter
             if (emailService != null) {
                 emailService.shutdown();
             }
@@ -711,7 +689,7 @@ public class GuiDataService {
             // Service-Status zurücksetzen
             isInitialized = false;
             
-            LOGGER.info("GuiDataService heruntergefahren (inkl. E-Mail-Service)");
+            LOGGER.info("GuiDataService heruntergefahren (inkl. E-Mail-Service mit Threshold-System)");
             
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Fehler beim Herunterfahren des GuiDataService: " + e.getMessage(), e);
@@ -805,7 +783,7 @@ public class GuiDataService {
             ExtendedDataStatistics stats = getExtendedDataStatistics();
             LOGGER.info("Initiale Statistiken: " + stats.getDetails());
             LOGGER.info("Verfügbare Währungspaare: " + stats.getAvailableCurrencyPairs());
-            LOGGER.info("E-Mail-Status: " + (emailConfig.isEmailEnabled() ? "✅ Aktiviert" : "❌ Deaktiviert"));
+            LOGGER.info("E-Mail-Status: " + (emailConfig.isEmailEnabled() ? "✅ Aktiviert (Threshold-System)" : "❌ Deaktiviert"));
             LOGGER.fine("Signalwechsel-Statistiken: " + stats.getSignalChangeStatistics());
             LOGGER.fine("E-Mail-Statistiken: " + stats.getEmailStatistics());
         } catch (Exception e) {
@@ -843,7 +821,7 @@ public class GuiDataService {
         private final String currencyPairDetails;
         private final int availableCurrencyPairs;
         private final String signalChangeStatistics;
-        private final String emailStatistics; // NEU
+        private final String emailStatistics;
         
         public ExtendedDataStatistics(int totalFiles, int todayRecords, String details, 
                                     String currencyPairDetails, int availableCurrencyPairs,
@@ -854,7 +832,7 @@ public class GuiDataService {
             this.currencyPairDetails = currencyPairDetails;
             this.availableCurrencyPairs = availableCurrencyPairs;
             this.signalChangeStatistics = signalChangeStatistics;
-            this.emailStatistics = emailStatistics; // NEU
+            this.emailStatistics = emailStatistics;
         }
         
         public int getTotalFiles() { return totalFiles; }
@@ -863,7 +841,7 @@ public class GuiDataService {
         public String getCurrencyPairDetails() { return currencyPairDetails; }
         public int getAvailableCurrencyPairs() { return availableCurrencyPairs; }
         public String getSignalChangeStatistics() { return signalChangeStatistics; }
-        public String getEmailStatistics() { return emailStatistics; } // NEU
+        public String getEmailStatistics() { return emailStatistics; }
         
         @Override
         public String toString() {

@@ -9,13 +9,14 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 import com.fxssi.extractor.model.CurrencyPairData;
-import com.fxssi.extractor.model.CurrencyPairData.TradingSignal;
 
 /**
  * Manager für die Verwaltung der zuletzt gesendeten E-Mail-Signale
@@ -80,44 +81,81 @@ public class LastSentSignalManager {
      * Lädt die zuletzt gesendeten Signale beim Start
      */
     public void loadLastSentSignals() {
+        LOGGER.info("=== DEBUG: loadLastSentSignals gestartet ===");
+        
         managerLock.lock();
         try {
             createSignalChangesDirectory();
             
+            LOGGER.info("DEBUG: Datei-Pfad: " + lastSentFilePath.toAbsolutePath());
+            LOGGER.info("DEBUG: Datei existiert: " + Files.exists(lastSentFilePath));
+            
             if (!Files.exists(lastSentFilePath)) {
-                LOGGER.info("Keine gespeicherten letzten gesendeten Signale gefunden - beginne mit leerer Liste");
+                LOGGER.info("DEBUG: Keine gespeicherten letzten gesendeten Signale gefunden - beginne mit leerer Liste");
                 return;
             }
             
+            long fileSize = Files.size(lastSentFilePath);
+            LOGGER.info("DEBUG: Datei-Größe: " + fileSize + " Bytes");
+            
+            if (fileSize == 0) {
+                LOGGER.warning("DEBUG: WARNUNG - Datei ist leer!");
+                return;
+            }
+            
+            LOGGER.info("DEBUG: Öffne BufferedReader...");
             try (BufferedReader reader = Files.newBufferedReader(lastSentFilePath, StandardCharsets.UTF_8)) {
                 String line;
                 boolean isFirstLine = true;
+                int lineNumber = 0;
+                int loadedCount = 0;
+                int skippedCount = 0;
                 
                 while ((line = reader.readLine()) != null) {
+                    lineNumber++;
+                    LOGGER.fine("DEBUG: Lese Zeile " + lineNumber + ": " + line);
+                    
                     if (isFirstLine) {
                         isFirstLine = false;
+                        LOGGER.info("DEBUG: Header übersprungen: " + line);
                         continue; // Überspringe Header
                     }
                     
                     try {
                         LastSentSignal lastSent = LastSentSignal.fromCsvLine(line);
                         lastSentSignals.put(lastSent.getCurrencyPair(), lastSent);
+                        loadedCount++;
+                        LOGGER.fine("DEBUG: Signal geladen: " + lastSent.toString());
                     } catch (Exception e) {
-                        LOGGER.fine("Ungültige LastSent-Zeile übersprungen: " + line);
+                        skippedCount++;
+                        LOGGER.warning("DEBUG: Ungültige LastSent-Zeile übersprungen (Zeile " + lineNumber + "): " + line + " - Fehler: " + e.getMessage());
                     }
+                }
+                
+                LOGGER.info("DEBUG: Datei-Analyse abgeschlossen:");
+                LOGGER.info("DEBUG:   - Gesamte Zeilen: " + lineNumber);
+                LOGGER.info("DEBUG:   - Erfolgreich geladen: " + loadedCount);
+                LOGGER.info("DEBUG:   - Übersprungen/Fehler: " + skippedCount);
+                LOGGER.info("DEBUG:   - Cache-Größe: " + lastSentSignals.size());
+                
+                LOGGER.info("DEBUG: Geladene Signale:");
+                for (Map.Entry<String, LastSentSignal> entry : lastSentSignals.entrySet()) {
+                    LOGGER.info("DEBUG:   " + entry.getKey() + " -> " + entry.getValue().toString());
                 }
                 
                 LOGGER.info("Letzte gesendete Signale geladen: " + lastSentSignals.size() + " Währungspaare");
                 
             } catch (Exception e) {
-                LOGGER.log(Level.WARNING, "Fehler beim Laden der letzten gesendeten Signale: " + e.getMessage(), e);
+                LOGGER.log(Level.SEVERE, "DEBUG: FEHLER beim Laden der letzten gesendeten Signale: " + e.getMessage(), e);
             }
             
+        } catch (IOException e) {
+            LOGGER.log(Level.SEVERE, "DEBUG: IO-FEHLER bei loadLastSentSignals: " + e.getMessage(), e);
         } finally {
             managerLock.unlock();
+            LOGGER.info("=== DEBUG: loadLastSentSignals beendet ===");
         }
     }
-    
     /**
      * HAUPTMETHODE: Prüft ob eine E-Mail für ein neues Signal gesendet werden soll
      * @param currencyPair Das Währungspaar
@@ -174,25 +212,47 @@ public class LastSentSignalManager {
      * @param buyPercentage Die Buy-Percentage zum Zeitpunkt des Sendens
      */
     public void recordSentSignal(String currencyPair, 
-                               CurrencyPairData.TradingSignal signal, 
-                               double buyPercentage) {
-        managerLock.lock();
-        try {
-            LocalDateTime now = LocalDateTime.now();
-            LastSentSignal lastSent = new LastSentSignal(currencyPair, signal, buyPercentage, now);
-            
-            lastSentSignals.put(currencyPair, lastSent);
-            
-            // Speichere sofort
-            saveLastSentSignals();
-            
-            LOGGER.info(String.format("Gesendetes Signal registriert: %s %s bei %.1f%% um %s", 
-                currencyPair, signal.getDescription(), buyPercentage, now.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
-            
-        } finally {
-            managerLock.unlock();
-        }
-    }
+            CurrencyPairData.TradingSignal signal, 
+            double buyPercentage) {
+LOGGER.info("=== DEBUG: recordSentSignal gestartet ===");
+LOGGER.info("DEBUG: Parameter - currencyPair: " + currencyPair);
+LOGGER.info("DEBUG: Parameter - signal: " + signal);
+LOGGER.info("DEBUG: Parameter - buyPercentage: " + buyPercentage);
+
+managerLock.lock();
+try {
+LOGGER.info("DEBUG: Lock erhalten, erstelle LastSentSignal...");
+LocalDateTime now = LocalDateTime.now();
+LastSentSignal lastSent = new LastSentSignal(currencyPair, signal, buyPercentage, now);
+
+LOGGER.info("DEBUG: LastSentSignal erstellt: " + lastSent.toString());
+LOGGER.info("DEBUG: Cache-Größe vor Speicherung: " + lastSentSignals.size());
+
+lastSentSignals.put(currencyPair, lastSent);
+
+LOGGER.info("DEBUG: Signal in Cache gespeichert");
+LOGGER.info("DEBUG: Cache-Größe nach Speicherung: " + lastSentSignals.size());
+LOGGER.info("DEBUG: Cache-Inhalt:");
+for (Map.Entry<String, LastSentSignal> entry : lastSentSignals.entrySet()) {
+LOGGER.info("DEBUG:   " + entry.getKey() + " -> " + entry.getValue().toString());
+}
+
+// Speichere sofort
+LOGGER.info("DEBUG: Rufe saveLastSentSignals() auf...");
+saveLastSentSignals();
+LOGGER.info("DEBUG: saveLastSentSignals() abgeschlossen");
+
+LOGGER.info(String.format("DEBUG: Gesendetes Signal registriert: %s %s bei %.1f%% um %s", 
+currencyPair, signal.getDescription(), buyPercentage, now.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
+
+} catch (Exception e) {
+LOGGER.log(Level.SEVERE, "DEBUG: FEHLER in recordSentSignal: " + e.getMessage(), e);
+throw e; // Re-throw um den Fehler nicht zu verstecken
+} finally {
+managerLock.unlock();
+LOGGER.info("=== DEBUG: recordSentSignal beendet ===");
+}
+}
     
     /**
      * Holt das zuletzt gesendete Signal für ein Währungspaar
@@ -287,25 +347,76 @@ public class LastSentSignalManager {
      * Speichert die zuletzt gesendeten Signale in die Datei
      */
     private void saveLastSentSignals() {
+        LOGGER.info("=== DEBUG: saveLastSentSignals gestartet ===");
+        
         try {
+            LOGGER.info("DEBUG: Erstelle Signal-Verzeichnis...");
             createSignalChangesDirectory();
+            LOGGER.info("DEBUG: Signal-Verzeichnis OK");
             
+            LOGGER.info("DEBUG: Datei-Pfad: " + lastSentFilePath.toAbsolutePath());
+            LOGGER.info("DEBUG: Verzeichnis existiert: " + Files.exists(signalChangesPath));
+            LOGGER.info("DEBUG: Datei existiert vor Schreibung: " + Files.exists(lastSentFilePath));
+            
+            LOGGER.info("DEBUG: Cache enthält " + lastSentSignals.size() + " Einträge:");
+            for (Map.Entry<String, LastSentSignal> entry : lastSentSignals.entrySet()) {
+                LOGGER.info("DEBUG:   " + entry.getKey() + " -> " + entry.getValue().toCsvLine());
+            }
+            
+            LOGGER.info("DEBUG: Öffne BufferedWriter...");
             try (BufferedWriter writer = Files.newBufferedWriter(lastSentFilePath, StandardCharsets.UTF_8)) {
-                writer.write(LastSentSignal.getCsvHeader());
+                LOGGER.info("DEBUG: Schreibe Header...");
+                String header = LastSentSignal.getCsvHeader();
+                LOGGER.info("DEBUG: Header: " + header);
+                writer.write(header);
                 writer.newLine();
                 
+                LOGGER.info("DEBUG: Schreibe " + lastSentSignals.size() + " Datenzeilen...");
+                int lineCount = 0;
                 for (LastSentSignal signal : lastSentSignals.values()) {
-                    writer.write(signal.toCsvLine());
+                    String csvLine = signal.toCsvLine();
+                    LOGGER.info("DEBUG: Zeile " + (++lineCount) + ": " + csvLine);
+                    writer.write(csvLine);
                     writer.newLine();
                 }
                 
+                LOGGER.info("DEBUG: Alle Daten geschrieben, rufe flush() auf...");
                 writer.flush();
+                LOGGER.info("DEBUG: flush() abgeschlossen");
             }
             
-            LOGGER.fine("Letzte gesendete Signale gespeichert: " + lastSentSignals.size() + " Einträge");
+            // Verifikation nach dem Schreiben
+            LOGGER.info("DEBUG: Datei existiert nach Schreibung: " + Files.exists(lastSentFilePath));
+            if (Files.exists(lastSentFilePath)) {
+                long fileSize = Files.size(lastSentFilePath);
+                LOGGER.info("DEBUG: Datei-Größe nach Schreibung: " + fileSize + " Bytes");
+                
+                if (fileSize > 0) {
+                    LOGGER.info("DEBUG: Lese Datei zur Verifikation...");
+                    List<String> lines = Files.readAllLines(lastSentFilePath, StandardCharsets.UTF_8);
+                    LOGGER.info("DEBUG: Datei enthält " + lines.size() + " Zeilen:");
+                    for (int i = 0; i < lines.size() && i < 10; i++) { // Maximal 10 Zeilen loggen
+                        LOGGER.info("DEBUG:   Zeile " + (i+1) + ": " + lines.get(i));
+                    }
+                } else {
+                    LOGGER.warning("DEBUG: WARNUNG - Datei ist leer nach dem Schreiben!");
+                }
+            } else {
+                LOGGER.severe("DEBUG: FEHLER - Datei existiert nicht nach dem Schreiben!");
+            }
+            
+            LOGGER.info("DEBUG: Letzte gesendete Signale gespeichert: " + lastSentSignals.size() + " Einträge");
             
         } catch (IOException e) {
-            LOGGER.log(Level.WARNING, "Fehler beim Speichern der letzten gesendeten Signale: " + e.getMessage(), e);
+            LOGGER.log(Level.SEVERE, "DEBUG: IO-FEHLER beim Speichern der letzten gesendeten Signale: " + e.getMessage(), e);
+            LOGGER.severe("DEBUG: Datei-Pfad: " + lastSentFilePath.toAbsolutePath());
+            LOGGER.severe("DEBUG: Verzeichnis-Rechte: " + (Files.isWritable(signalChangesPath) ? "Schreibbar" : "Nicht schreibbar"));
+            throw new RuntimeException("Fehler beim Speichern der LastSent-Signale", e);
+        } catch (Exception e) {
+            LOGGER.log(Level.SEVERE, "DEBUG: UNBEKANNTER FEHLER beim Speichern: " + e.getMessage(), e);
+            throw new RuntimeException("Unbekannter Fehler beim Speichern der LastSent-Signale", e);
+        } finally {
+            LOGGER.info("=== DEBUG: saveLastSentSignals beendet ===");
         }
     }
     
