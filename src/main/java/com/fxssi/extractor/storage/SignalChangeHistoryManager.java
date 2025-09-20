@@ -626,6 +626,7 @@ public class SignalChangeHistoryManager {
     
     /**
      * NEU: Synchronisiert die last_known_signals.csv ins MetaTrader-Verzeichnis
+     * ERWEITERT um Währungspaar-Konvertierung für MetaTrader-Kompatibilität
      */
     private void syncLastKnownSignalsToMetaTrader() {
         if (!metatraderSyncEnabled || metatraderFileDir == null) {
@@ -664,13 +665,19 @@ public class SignalChangeHistoryManager {
                 return;
             }
             
+            // Pfade für temporäre und finale Datei
+            Path tmpFile = mtDir.resolve("last_known_signals_tmp.csv");
             Path targetFile = mtDir.resolve(LAST_SIGNALS_FILE);
             
-            // Kopiere Datei
-            Files.copy(lastSignalsFilePath, targetFile, StandardCopyOption.REPLACE_EXISTING);
+            // Schritt 1: Erstelle temporäre Datei mit konvertierten Währungspaaren
+            createConvertedMetaTraderFile(tmpFile);
             
-            LOGGER.info("last_known_signals.csv erfolgreich ins MetaTrader-Verzeichnis synchronisiert: " + 
+            // Schritt 2: Benenne temporäre Datei um zur finalen Datei
+            Files.move(tmpFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
+            
+            LOGGER.info("MetaTrader-Datei erfolgreich synchronisiert mit Währungskonvertierung: " + 
                        targetFile.toAbsolutePath());
+            LOGGER.fine("Konvertierungen: EUR/USD→EURUSD, XAUUSD→GOLD, XAGUSD→SILVER");
             
         } catch (IOException e) {
             LOGGER.log(Level.WARNING, "Fehler bei MetaTrader-Synchronisation: " + e.getMessage(), e);
@@ -679,6 +686,76 @@ public class SignalChangeHistoryManager {
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Unerwarteter Fehler bei MetaTrader-Synchronisation: " + e.getMessage(), e);
         }
+    }
+    
+    /**
+     * NEU: Erstellt die MetaTrader-kompatible Datei mit konvertierten Währungspaaren
+     * @param tmpFilePath Pfad zur temporären Datei im MetaTrader-Verzeichnis
+     */
+    private void createConvertedMetaTraderFile(Path tmpFilePath) throws IOException {
+        LOGGER.fine("Erstelle MetaTrader-kompatible Datei: " + tmpFilePath.getFileName());
+        
+        try (BufferedWriter writer = Files.newBufferedWriter(tmpFilePath, StandardCharsets.UTF_8)) {
+            // Header schreiben (konvertiert)
+            writer.write("Waehrungspaar;Letztes_Signal");
+            writer.newLine();
+            
+            int convertedCount = 0;
+            int totalCount = 0;
+            
+            // Konvertiere und schreibe Daten
+            for (Map.Entry<String, CurrencyPairData.TradingSignal> entry : lastKnownSignals.entrySet()) {
+                String originalPair = entry.getKey();
+                String convertedPair = convertCurrencyPairForMetaTrader(originalPair);
+                CurrencyPairData.TradingSignal signal = entry.getValue();
+                
+                writer.write(convertedPair + ";" + signal.name());
+                writer.newLine();
+                
+                totalCount++;
+                if (!originalPair.equals(convertedPair)) {
+                    convertedCount++;
+                    LOGGER.fine("Konvertiert: " + originalPair + " → " + convertedPair);
+                }
+            }
+            
+            writer.flush();
+            
+            LOGGER.info("MetaTrader-Datei erstellt: " + totalCount + " Währungspaare, " + 
+                       convertedCount + " konvertiert");
+        }
+    }
+    
+    /**
+     * NEU: Konvertiert Währungspaare für MetaTrader-Kompatibilität
+     * @param originalPair Ursprüngliches Währungspaar (z.B. "EUR/USD")
+     * @return MetaTrader-kompatibles Währungspaar (z.B. "EURUSD")
+     */
+    private String convertCurrencyPairForMetaTrader(String originalPair) {
+        if (originalPair == null || originalPair.trim().isEmpty()) {
+            return originalPair;
+        }
+        
+        String converted = originalPair.trim();
+        
+        // Schritt 1: Entferne Schrägstriche (/) - EUR/USD → EURUSD
+        converted = converted.replace("/", "");
+        
+        // Schritt 2: Spezielle Konvertierungen für Edelmetalle
+        switch (converted.toUpperCase()) {
+            case "XAUUSD":
+                converted = "GOLD";
+                break;
+            case "XAGUSD":
+                converted = "SILVER";
+                break;
+            // Weitere spezielle Konvertierungen können hier hinzugefügt werden
+            default:
+                // Keine weitere Konvertierung nötig
+                break;
+        }
+        
+        return converted;
     }
     
     /**
