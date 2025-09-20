@@ -301,14 +301,98 @@ public class MainWindowController {
      */
     private void openEmailConfiguration() {
         try {
-            LOGGER.info("Öffne E-Mail-Konfigurationsfenster...");
+            LOGGER.info("Öffne E-Mail-Konfigurationsfenster mit MetaTrader-Integration...");
             
-            // Erstelle und zeige das E-Mail-Konfigurationsfenster
+            // Erstelle das E-Mail-Konfigurationsfenster
             EmailConfigWindow emailConfigWindow = new EmailConfigWindow(stage, dataDirectory);
+            
+            // NEU: Definiere Callback für MetaTrader-Konfiguration
+            emailConfigWindow.setMetaTraderConfigurationCallback((enabled, directory) -> {
+                try {
+                    if (enabled && directory != null && !directory.trim().isEmpty()) {
+                        // Aktiviere MetaTrader-Synchronisation
+                        dataService.getSignalChangeHistoryManager().setMetatraderFileDir(directory.trim());
+                        LOGGER.info("MetaTrader-Synchronisation aktiviert: " + directory);
+                        
+                        // Aktualisiere GUI-Status
+                        Platform.runLater(() -> {
+                            updateStatus("MetaTrader-Synchronisation aktiviert: " + directory);
+                            
+                            // Optional: Zeige Bestätigung
+                            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+                            alert.setTitle("MetaTrader-Synchronisation");
+                            alert.setHeaderText("MetaTrader-Datei-Synchronisation aktiviert");
+                            alert.setContentText("✅ Die last_known_signals.csv wird automatisch synchronisiert nach:\n" + 
+                                directory + "\n\nDie Synchronisation ist sofort aktiv.");
+                            alert.showAndWait();
+                        });
+                        
+                    } else {
+                        // Deaktiviere MetaTrader-Synchronisation
+                        dataService.getSignalChangeHistoryManager().setMetatraderFileDir(null);
+                        LOGGER.info("MetaTrader-Synchronisation deaktiviert");
+                        
+                        // Aktualisiere GUI-Status
+                        Platform.runLater(() -> {
+                            updateStatus("MetaTrader-Synchronisation deaktiviert");
+                        });
+                    }
+                    
+                } catch (IllegalArgumentException e) {
+                    LOGGER.warning("Ungültiges MetaTrader-Verzeichnis: " + e.getMessage());
+                    
+                    Platform.runLater(() -> {
+                        Alert alert = new Alert(Alert.AlertType.WARNING);
+                        alert.setTitle("MetaTrader-Verzeichnis ungültig");
+                        alert.setHeaderText("MetaTrader-Synchronisation konnte nicht aktiviert werden");
+                        alert.setContentText("Das angegebene Verzeichnis ist ungültig:\n\n" + e.getMessage() + 
+                            "\n\nBitte überprüfen Sie:\n" +
+                            "• Verzeichnis existiert\n" +
+                            "• Verzeichnis ist beschreibbar\n" +
+                            "• Korrekte Pfadangabe");
+                        alert.showAndWait();
+                        
+                        updateStatus("MetaTrader-Konfiguration fehlgeschlagen: " + e.getMessage());
+                    });
+                    
+                } catch (Exception e) {
+                    LOGGER.severe("Fehler bei MetaTrader-Konfiguration: " + e.getMessage());
+                    
+                    Platform.runLater(() -> {
+                        Alert alert = new Alert(Alert.AlertType.ERROR);
+                        alert.setTitle("MetaTrader-Konfigurationsfehler");
+                        alert.setHeaderText("MetaTrader-Synchronisation konnte nicht konfiguriert werden");
+                        alert.setContentText("Unerwarteter Fehler: " + e.getMessage() + 
+                            "\n\nMögliche Ursachen:\n" +
+                            "• Dateisystem-Berechtigungen\n" +
+                            "• Netzwerk-Laufwerk nicht verfügbar\n" +
+                            "• System-Ressourcen");
+                        alert.showAndWait();
+                        
+                        updateStatus("MetaTrader-Konfiguration fehlgeschlagen: " + e.getMessage());
+                    });
+                }
+            });
+            
+            // Lade aktuelle MetaTrader-Konfiguration in das Fenster (falls vorhanden)
+            try {
+                String currentMetaTraderDir = dataService.getSignalChangeHistoryManager().getMetatraderFileDir();
+                boolean isSyncEnabled = dataService.getSignalChangeHistoryManager().isMetatraderSyncEnabled();
+                
+                if (isSyncEnabled && currentMetaTraderDir != null) {
+                    LOGGER.info("Lade bestehende MetaTrader-Konfiguration: " + currentMetaTraderDir);
+                    // Hier könnte man das EmailConfigWindow mit den aktuellen Werten vorbelegen
+                    // Das ist optional, da die Konfiguration beim Speichern überschrieben wird
+                }
+                
+            } catch (Exception e) {
+                LOGGER.fine("Konnte aktuelle MetaTrader-Konfiguration nicht laden: " + e.getMessage());
+            }
+            
+            // Zeige das Konfigurationsfenster
             emailConfigWindow.show();
             
-            // Optional: Update E-Mail-Services nach Konfiguration
-            // (Das EmailConfigWindow macht das automatisch)
+            LOGGER.info("E-Mail-Konfigurationsfenster mit MetaTrader-Integration geöffnet");
             
         } catch (Exception e) {
             LOGGER.severe("Fehler beim Öffnen der E-Mail-Konfiguration: " + e.getMessage());
@@ -319,7 +403,8 @@ public class MainWindowController {
             alert.setContentText("Fehler: " + e.getMessage() + 
                 "\n\nMögliche Ursachen:" +
                 "\n• Konfigurationsverzeichnis nicht zugänglich" +
-                "\n• E-Mail-Services nicht initialisiert");
+                "\n• E-Mail-Services nicht initialisiert" +
+                "\n• MetaTrader-Integration nicht verfügbar");
             alert.showAndWait();
         }
     }

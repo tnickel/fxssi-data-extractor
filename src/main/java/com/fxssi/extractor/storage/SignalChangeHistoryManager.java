@@ -9,6 +9,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -25,9 +26,10 @@ import java.util.stream.Collectors;
  * Manager für die Verwaltung und Speicherung von Signalwechsel-Ereignissen
  * Erkennt automatisch Signalwechsel und speichert sie persistent
  * ERWEITERT um EmailService-Integration mit Threshold-basierter E-Mail-Versendung
+ * ERWEITERT um MetaTrader-Datei-Synchronisation
  * 
  * @author Generated for FXSSI Signal Change Detection
- * @version 1.1 - EmailService Integration mit Anti-Spam-Threshold
+ * @version 1.2 - MetaTrader-Datei-Synchronisation
  */
 public class SignalChangeHistoryManager {
     
@@ -46,9 +48,13 @@ public class SignalChangeHistoryManager {
     private final ConcurrentHashMap<String, CurrencyPairData.TradingSignal> lastKnownSignals;
     private final ConcurrentHashMap<String, List<SignalChangeEvent>> changeHistoryCache;
     
-    // NEU: EmailService für Threshold-basierte Benachrichtigungen
+    // EmailService für Threshold-basierte Benachrichtigungen
     private EmailService emailService;
     private boolean emailNotificationsEnabled = false;
+    
+    // NEU: MetaTrader-Verzeichnis-Synchronisation
+    private String metatraderFileDir = null;
+    private boolean metatraderSyncEnabled = false;
     
     /**
      * Konstruktor mit Standard-Datenverzeichnis (ohne E-Mail)
@@ -77,7 +83,7 @@ public class SignalChangeHistoryManager {
     }
     
     /**
-     * NEU: Konstruktor mit EmailService für Threshold-basierte Benachrichtigungen
+     * Konstruktor mit EmailService für Threshold-basierte Benachrichtigungen
      * @param dataDirectory Pfad zum Hauptdatenverzeichnis
      * @param emailService EmailService für Benachrichtigungen
      */
@@ -98,7 +104,7 @@ public class SignalChangeHistoryManager {
     }
     
     /**
-     * NEU: Setzt den EmailService für Benachrichtigungen
+     * Setzt den EmailService für Benachrichtigungen
      * @param emailService EmailService für Threshold-basierte Benachrichtigungen
      */
     public void setEmailService(EmailService emailService) {
@@ -108,12 +114,66 @@ public class SignalChangeHistoryManager {
     }
     
     /**
-     * NEU: Aktiviert/Deaktiviert E-Mail-Benachrichtigungen
+     * Aktiviert/Deaktiviert E-Mail-Benachrichtigungen
      * @param enabled true = aktiviert, false = deaktiviert
      */
     public void setEmailNotificationsEnabled(boolean enabled) {
         this.emailNotificationsEnabled = enabled && (emailService != null);
         LOGGER.info("E-Mail-Benachrichtigungen " + (emailNotificationsEnabled ? "aktiviert" : "deaktiviert"));
+    }
+    
+    /**
+     * NEU: Setzt das MetaTrader-Verzeichnis für Datei-Synchronisation
+     * @param metatraderFileDir Pfad zum MetaTrader-Verzeichnis
+     * @throws IllegalArgumentException wenn das Verzeichnis nicht existiert
+     */
+    public void setMetatraderFileDir(String metatraderFileDir) {
+        if (metatraderFileDir == null || metatraderFileDir.trim().isEmpty()) {
+            this.metatraderFileDir = null;
+            this.metatraderSyncEnabled = false;
+            LOGGER.info("MetaTrader-Synchronisation deaktiviert");
+            return;
+        }
+        
+        Path mtDir = Paths.get(metatraderFileDir.trim());
+        if (!Files.exists(mtDir)) {
+            LOGGER.severe("MetaTrader-Verzeichnis existiert nicht: " + mtDir.toAbsolutePath());
+            throw new IllegalArgumentException("MetaTrader-Verzeichnis existiert nicht: " + mtDir.toAbsolutePath());
+        }
+        
+        if (!Files.isDirectory(mtDir)) {
+            LOGGER.severe("MetaTrader-Pfad ist kein Verzeichnis: " + mtDir.toAbsolutePath());
+            throw new IllegalArgumentException("MetaTrader-Pfad ist kein Verzeichnis: " + mtDir.toAbsolutePath());
+        }
+        
+        if (!Files.isWritable(mtDir)) {
+            LOGGER.severe("MetaTrader-Verzeichnis ist nicht beschreibbar: " + mtDir.toAbsolutePath());
+            throw new IllegalArgumentException("MetaTrader-Verzeichnis ist nicht beschreibbar: " + mtDir.toAbsolutePath());
+        }
+        
+        this.metatraderFileDir = metatraderFileDir.trim();
+        this.metatraderSyncEnabled = true;
+        
+        LOGGER.info("MetaTrader-Synchronisation aktiviert für Verzeichnis: " + mtDir.toAbsolutePath());
+        
+        // Führe sofortige Synchronisation durch, wenn last_known_signals.csv bereits existiert
+        syncLastKnownSignalsToMetaTrader();
+    }
+    
+    /**
+     * NEU: Gibt das aktuelle MetaTrader-Verzeichnis zurück
+     * @return MetaTrader-Verzeichnispfad oder null wenn nicht gesetzt
+     */
+    public String getMetatraderFileDir() {
+        return metatraderFileDir;
+    }
+    
+    /**
+     * NEU: Prüft ob MetaTrader-Synchronisation aktiviert ist
+     * @return true wenn aktiviert und Verzeichnis gültig
+     */
+    public boolean isMetatraderSyncEnabled() {
+        return metatraderSyncEnabled && metatraderFileDir != null;
     }
     
     /**
@@ -226,18 +286,18 @@ public class SignalChangeHistoryManager {
                 // Aktualisiere Cache
                 updateChangeHistoryCache(detectedChanges);
                 
-                // Speichere aktuelle Signale
+                // Speichere aktuelle Signale (inkl. MetaTrader-Sync)
                 saveLastKnownSignals();
                 
                 LOGGER.info("Signalwechsel-Verarbeitung abgeschlossen: " + detectedChanges.size() + " Wechsel erkannt");
             } else {
                 LOGGER.fine("Keine Signalwechsel erkannt");
                 
-                // Speichere trotzdem aktuelle Signale falls neue Währungspaare hinzugekommen sind
+                // Speichere trotzdem aktuelle Signale falls neue Währungspaare hinzugekommen sind (inkl. MetaTrader-Sync)
                 saveLastKnownSignals();
             }
             
-            // NEU: THRESHOLD-BASIERTE E-MAIL-VERSENDUNG
+            // Threshold-basierte E-Mail-Versendung
             if (emailNotificationsEnabled && emailService != null) {
                 try {
                     LOGGER.fine("Prüfe Threshold-basierte E-Mail-Versendung für " + newData.size() + " Datensätze...");
@@ -332,7 +392,7 @@ public class SignalChangeHistoryManager {
     }
     
     /**
-     * NEU: Gibt Statistiken über alle Signalwechsel UND E-Mail-Status zurück
+     * Gibt Statistiken über alle Signalwechsel UND E-Mail-Status zurück
      * @return Statistik-String
      */
     public String getSignalChangeStatistics() {
@@ -369,7 +429,7 @@ public class SignalChangeHistoryManager {
                 stats.append("  ").append(importance.getIcon()).append(" ").append(importance.getDescription()).append(": ").append(count).append("\n");
             }
             
-            // NEU: E-Mail-Status
+            // E-Mail-Status
             stats.append("\nE-Mail-Benachrichtigungen:\n");
             stats.append("==========================\n");
             stats.append("Status: ").append(emailNotificationsEnabled ? "Aktiviert" : "Deaktiviert").append("\n");
@@ -382,6 +442,22 @@ public class SignalChangeHistoryManager {
                 } catch (Exception e) {
                     stats.append("Fehler beim Abrufen der E-Mail-Statistiken: ").append(e.getMessage()).append("\n");
                 }
+            }
+            
+            // NEU: MetaTrader-Synchronisation Status
+            stats.append("\nMetaTrader-Synchronisation:\n");
+            stats.append("============================\n");
+            stats.append("Status: ").append(metatraderSyncEnabled ? "Aktiviert" : "Deaktiviert").append("\n");
+            if (metatraderFileDir != null) {
+                stats.append("Verzeichnis: ").append(metatraderFileDir).append("\n");
+                Path mtPath = Paths.get(metatraderFileDir);
+                stats.append("Verzeichnis existiert: ").append(Files.exists(mtPath) ? "Ja" : "Nein").append("\n");
+                if (Files.exists(mtPath)) {
+                    Path syncFile = mtPath.resolve(LAST_SIGNALS_FILE);
+                    stats.append("Sync-Datei existiert: ").append(Files.exists(syncFile) ? "Ja" : "Nein").append("\n");
+                }
+            } else {
+                stats.append("Verzeichnis: Nicht konfiguriert\n");
             }
             
             return stats.toString();
@@ -421,7 +497,7 @@ public class SignalChangeHistoryManager {
                 LOGGER.info("Keine alten Signalwechsel zum Bereinigen gefunden");
             }
             
-            // NEU: Bereinige auch LastSentSignalManager falls verfügbar
+            // Bereinige auch LastSentSignalManager falls verfügbar
             if (emailService != null) {
                 try {
                     emailService.getLastSentSignalManager().cleanupOldEntries(daysToKeep);
@@ -442,14 +518,14 @@ public class SignalChangeHistoryManager {
         LOGGER.info("Fahre SignalChangeHistoryManager herunter...");
         
         try {
-            // Speichere letzte bekannte Signale
+            // Speichere letzte bekannte Signale (inkl. MetaTrader-Sync)
             saveLastKnownSignals();
             
             // Cache leeren
             lastKnownSignals.clear();
             changeHistoryCache.clear();
             
-            // NEU: EmailService shutdown (falls vorhanden)
+            // EmailService shutdown (falls vorhanden)
             if (emailService != null) {
                 try {
                     emailService.shutdown();
@@ -469,7 +545,7 @@ public class SignalChangeHistoryManager {
     // ===== GETTER FÜR INTEGRATION =====
     
     /**
-     * NEU: Gibt den aktuellen EmailService zurück
+     * Gibt den aktuellen EmailService zurück
      * @return EmailService oder null
      */
     public EmailService getEmailService() {
@@ -477,7 +553,7 @@ public class SignalChangeHistoryManager {
     }
     
     /**
-     * NEU: Prüft ob E-Mail-Benachrichtigungen aktiviert sind
+     * Prüft ob E-Mail-Benachrichtigungen aktiviert sind
      * @return true wenn aktiviert und EmailService verfügbar
      */
     public boolean isEmailNotificationsEnabled() {
@@ -520,6 +596,7 @@ public class SignalChangeHistoryManager {
     
     /**
      * Speichert die letzten bekannten Signale
+     * ERWEITERT um MetaTrader-Synchronisation
      */
     private void saveLastKnownSignals() {
         try {
@@ -539,8 +616,68 @@ public class SignalChangeHistoryManager {
             
             LOGGER.fine("Letzte bekannte Signale gespeichert: " + lastKnownSignals.size() + " Währungspaare");
             
+            // NEU: Synchronisiere mit MetaTrader-Verzeichnis
+            syncLastKnownSignalsToMetaTrader();
+            
         } catch (IOException e) {
             LOGGER.log(Level.WARNING, "Fehler beim Speichern der letzten Signale: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * NEU: Synchronisiert die last_known_signals.csv ins MetaTrader-Verzeichnis
+     */
+    private void syncLastKnownSignalsToMetaTrader() {
+        if (!metatraderSyncEnabled || metatraderFileDir == null) {
+            LOGGER.fine("MetaTrader-Synchronisation deaktiviert oder nicht konfiguriert");
+            return;
+        }
+        
+        try {
+            Path mtDir = Paths.get(metatraderFileDir);
+            
+            // Prüfe Verzeichnis erneut vor Synchronisation
+            if (!Files.exists(mtDir)) {
+                LOGGER.warning("MetaTrader-Verzeichnis existiert nicht mehr: " + mtDir.toAbsolutePath() + 
+                              " - Deaktiviere Synchronisation");
+                metatraderSyncEnabled = false;
+                return;
+            }
+            
+            if (!Files.isDirectory(mtDir)) {
+                LOGGER.warning("MetaTrader-Pfad ist kein Verzeichnis: " + mtDir.toAbsolutePath() + 
+                              " - Deaktiviere Synchronisation");
+                metatraderSyncEnabled = false;
+                return;
+            }
+            
+            if (!Files.isWritable(mtDir)) {
+                LOGGER.warning("MetaTrader-Verzeichnis ist nicht beschreibbar: " + mtDir.toAbsolutePath() + 
+                              " - Deaktiviere Synchronisation");
+                metatraderSyncEnabled = false;
+                return;
+            }
+            
+            // Prüfe ob Quelldatei existiert
+            if (!Files.exists(lastSignalsFilePath)) {
+                LOGGER.fine("Quelldatei last_known_signals.csv existiert noch nicht - keine Synchronisation");
+                return;
+            }
+            
+            Path targetFile = mtDir.resolve(LAST_SIGNALS_FILE);
+            
+            // Kopiere Datei
+            Files.copy(lastSignalsFilePath, targetFile, StandardCopyOption.REPLACE_EXISTING);
+            
+            LOGGER.info("last_known_signals.csv erfolgreich ins MetaTrader-Verzeichnis synchronisiert: " + 
+                       targetFile.toAbsolutePath());
+            
+        } catch (IOException e) {
+            LOGGER.log(Level.WARNING, "Fehler bei MetaTrader-Synchronisation: " + e.getMessage(), e);
+            LOGGER.warning("MetaTrader-Synchronisation aufgrund von Fehlern temporär deaktiviert");
+            // Nicht dauerhaft deaktivieren, da es temporäre I/O-Probleme sein könnten
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Unerwarteter Fehler bei MetaTrader-Synchronisation: " + e.getMessage(), e);
         }
     }
     
