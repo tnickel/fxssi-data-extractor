@@ -60,7 +60,7 @@ public class EmailConfigWindow {
     private Button thresholdHelpButton;
     private Label thresholdExampleLabel;
     
-    // NEU: UI-Komponenten - MetaTrader-Konfiguration
+    // UI-Komponenten - MetaTrader-Konfiguration
     private TextField metatraderDirField;
     private Button metatraderBrowseButton;
     private Button metatraderTestButton;
@@ -83,7 +83,7 @@ public class EmailConfigWindow {
     private EmailService emailService;
     private final String dataDirectory;
     
-    // NEU: Callback-Interface für MetaTrader-Konfiguration
+    // Callback-Interface für MetaTrader-Konfiguration
     @FunctionalInterface
     public interface MetaTraderConfigurationCallback {
         void configure(boolean enabled, String directory);
@@ -155,7 +155,7 @@ public class EmailConfigWindow {
     private VBox createTopArea() {
         VBox topArea = new VBox(10);
         
-        Label titleLabel = new Label("📧 E-Mail-Konfiguration + MetaTrader-Synchronisation");
+        Label titleLabel = new Label("🔧 E-Mail-Konfiguration + MetaTrader-Synchronisation");
         titleLabel.setFont(Font.font("System", FontWeight.BOLD, 18));
         titleLabel.setStyle("-fx-text-fill: #2E86AB;");
         
@@ -183,7 +183,7 @@ public class EmailConfigWindow {
         // Benachrichtigungspräferenzen
         TitledPane notificationPane = createNotificationConfigPane();
         
-        // NEU: MetaTrader-Konfiguration
+        // MetaTrader-Konfiguration
         TitledPane metatraderPane = createMetaTraderConfigPane();
         
         // Status-Bereich
@@ -200,7 +200,7 @@ public class EmailConfigWindow {
     }
     
     /**
-     * NEU: Erstellt den MetaTrader-Konfigurationsbereich
+     * Erstellt den MetaTrader-Konfigurationsbereich
      */
     private TitledPane createMetaTraderConfigPane() {
         VBox metatraderContent = new VBox(15);
@@ -222,7 +222,7 @@ public class EmailConfigWindow {
         metatraderDirField.setPrefWidth(300);
         metatraderDirField.setPromptText("C:\\Users\\Username\\AppData\\Roaming\\MetaQuotes\\Terminal\\xxx\\MQL5\\Files");
         
-        metatraderBrowseButton = new Button("📁 Durchsuchen");
+        metatraderBrowseButton = new Button("🔍 Durchsuchen");
         metatraderBrowseButton.setOnAction(e -> browseMetaTraderDirectory());
         metatraderBrowseButton.setStyle("-fx-background-color: #17a2b8; -fx-text-fill: white;");
         
@@ -278,7 +278,7 @@ public class EmailConfigWindow {
     }
     
     /**
-     * NEU: Durchsucht nach MetaTrader-Verzeichnis
+     * Durchsucht nach MetaTrader-Verzeichnis
      */
     private void browseMetaTraderDirectory() {
         DirectoryChooser directoryChooser = new DirectoryChooser();
@@ -310,7 +310,7 @@ public class EmailConfigWindow {
     }
     
     /**
-     * NEU: Testet das MetaTrader-Verzeichnis
+     * Testet das MetaTrader-Verzeichnis
      */
     private void testMetaTraderDirectory() {
         String dirPath = metatraderDirField.getText().trim();
@@ -380,7 +380,7 @@ public class EmailConfigWindow {
     }
     
     /**
-     * NEU: Aktualisiert den MetaTrader-Status
+     * Aktualisiert den MetaTrader-Status
      */
     private void updateMetaTraderStatus(String status) {
         if (metatraderStatusLabel != null) {
@@ -389,7 +389,7 @@ public class EmailConfigWindow {
     }
     
     /**
-     * NEU: Zeigt MetaTrader-Alert
+     * Zeigt MetaTrader-Alert
      */
     private void showMetaTraderAlert(String title, String message) {
         Platform.runLater(() -> {
@@ -402,7 +402,7 @@ public class EmailConfigWindow {
     }
     
     /**
-     * NEU: Aktualisiert den Zustand der MetaTrader-Felder
+     * Aktualisiert den Zustand der MetaTrader-Felder
      */
     private void updateMetaTraderFieldsState() {
         boolean enabled = metatraderSyncEnabledCheckBox.isSelected();
@@ -762,31 +762,47 @@ public class EmailConfigWindow {
         signalThresholdSpinner.getValueFactory().setValue(emailConfig.getSignalChangeThreshold());
         updateThresholdTooltipAndExample();
         
-        // NEU: MetaTrader-Konfiguration laden
+        // MetaTrader-Konfiguration laden
         loadMetaTraderConfiguration();
         
         LOGGER.info("Konfiguration in UI-Felder geladen (inkl. MetaTrader-Konfiguration)");
     }
     
     /**
-     * NEU: Lädt die MetaTrader-Konfiguration
+     * Lädt die MetaTrader-Konfiguration aus EmailConfig
+     * AKTUALISIERT: Verwendet jetzt die echten EmailConfig-Werte
      */
     private void loadMetaTraderConfiguration() {
         try {
-            // Hier würde normalerweise die MetaTrader-Konfiguration aus EmailConfig gelesen
-            // Da EmailConfig das noch nicht unterstützt, verwenden wir Standardwerte
+            // Lade MetaTrader-Konfiguration aus EmailConfig
+            metatraderSyncEnabledCheckBox.setSelected(emailConfig.isMetatraderSyncEnabled());
+            metatraderDirField.setText(emailConfig.getMetatraderDirectory());
             
-            // TODO: EmailConfig um MetaTrader-Felder erweitern
-            // Vorerst: Felder leer lassen
-            metatraderSyncEnabledCheckBox.setSelected(false);
-            metatraderDirField.setText("");
+            // Aktualisiere UI-Zustand
             updateMetaTraderFieldsState();
-            updateMetaTraderStatus("Nicht konfiguriert");
+            
+            // Setze Status basierend auf Konfiguration
+            if (emailConfig.isMetatraderSyncEnabled()) {
+                if (emailConfig.isMetaTraderSyncAvailable()) {
+                    updateMetaTraderStatus("✅ Konfiguriert und verfügbar");
+                } else {
+                    updateMetaTraderStatus("⚠️ Konfiguriert aber Verzeichnis nicht verfügbar");
+                }
+            } else {
+                updateMetaTraderStatus("Deaktiviert");
+            }
+            
+            LOGGER.info("MetaTrader-Konfiguration aus EmailConfig geladen: " + 
+                       "Enabled=" + emailConfig.isMetatraderSyncEnabled() + 
+                       ", Dir=" + emailConfig.getMetatraderDirectory());
             
         } catch (Exception e) {
             LOGGER.warning("Fehler beim Laden der MetaTrader-Konfiguration: " + e.getMessage());
+            // Fallback zu Standardwerten
             metatraderSyncEnabledCheckBox.setSelected(false);
+            metatraderDirField.setText("");
             updateMetaTraderFieldsState();
+            updateMetaTraderStatus("Fehler beim Laden");
         }
     }
     
@@ -959,160 +975,8 @@ public class EmailConfigWindow {
     }
     
     /**
-     * Speichert die Konfiguration
-     * ERWEITERT um Signal-Threshold und MetaTrader-Konfiguration
-     */
-    private void saveConfiguration() {
-        try {
-            // Validiere Eingaben
-            EmailConfig.ValidationResult validation = validateInputs();
-            if (!validation.isValid()) {
-                Alert alert = new Alert(Alert.AlertType.WARNING);
-                alert.setTitle("Ungültige Eingaben");
-                alert.setHeaderText("Konfiguration kann nicht gespeichert werden");
-                alert.setContentText(validation.getErrorMessage());
-                alert.showAndWait();
-                return;
-            }
-            
-            // NEU: Validiere MetaTrader-Konfiguration
-            if (!validateMetaTraderConfiguration()) {
-                return; // Fehler bereits angezeigt
-            }
-            
-            // Aktualisiere Konfiguration
-            updateConfigFromFields();
-            
-            // Speichere Konfiguration
-            emailConfig.saveConfig();
-            
-            // Aktualisiere E-Mail-Service
-            emailService.updateConfig(emailConfig);
-            
-            // NEU: Konfiguriere MetaTrader-Synchronisation
-            configureMetaTraderSynchronization();
-            
-            // NEU: MetaTrader-Konfiguration über Callback weiterleiten
-            if (metaTraderCallback != null) {
-                try {
-                    metaTraderCallback.configure(
-                        metatraderSyncEnabledCheckBox.isSelected(),
-                        metatraderDirField.getText().trim()
-                    );
-                    LOGGER.info("MetaTrader-Konfiguration über Callback weitergeleitet");
-                } catch (Exception e) {
-                    LOGGER.warning("Fehler beim MetaTrader-Callback: " + e.getMessage());
-                    appendStatus("- Warnung: MetaTrader-Integration nicht vollständig aktiviert\n");
-                }
-            } else {
-                LOGGER.fine("Kein MetaTrader-Callback definiert");
-            }
-            
-            appendStatus("💾 Konfiguration erfolgreich gespeichert\n");
-            appendStatus("- E-Mail-Benachrichtigungen: " + (emailConfig.isEmailEnabled() ? "Aktiviert" : "Deaktiviert") + "\n");
-            appendStatus("- Server: " + emailConfig.getSmtpHost() + ":" + emailConfig.getSmtpPort() + "\n");
-            appendStatus("- Signal-Threshold: " + emailConfig.getSignalChangeThreshold() + "%\n");
-            appendStatus("- MetaTrader-Sync: " + (metatraderSyncEnabledCheckBox.isSelected() ? "Aktiviert" : "Deaktiviert") + "\n");
-            appendStatus("- CSV-Speicherort: " + dataDirectory + "/signal_changes/\n\n");
-            
-            LOGGER.info("Konfiguration erfolgreich gespeichert (inkl. MetaTrader: " + metatraderSyncEnabledCheckBox.isSelected() + ")");
-            
-            // Erfolgsmeldung
-            Alert alert = new Alert(Alert.AlertType.INFORMATION);
-            alert.setTitle("Konfiguration gespeichert");
-            alert.setHeaderText("E-Mail-Konfiguration + MetaTrader-Sync erfolgreich gespeichert!");
-            alert.setContentText("Die Einstellungen wurden gespeichert und sind sofort aktiv.\n\n" +
-                "Signal-Threshold: " + emailConfig.getSignalChangeThreshold() + "%\n" +
-                "E-Mail-Benachrichtigungen: " + (emailConfig.isEmailEnabled() ? "Aktiviert" : "Deaktiviert") + "\n" +
-                "MetaTrader-Synchronisation: " + (metatraderSyncEnabledCheckBox.isSelected() ? "Aktiviert" : "Deaktiviert") + "\n" +
-                "CSV-Speicherort: " + dataDirectory + "/signal_changes/");
-            alert.showAndWait();
-            
-        } catch (Exception e) {
-            LOGGER.severe("Fehler beim Speichern der Konfiguration: " + e.getMessage());
-            
-            Alert alert = new Alert(Alert.AlertType.ERROR);
-            alert.setTitle("Speicherfehler");
-            alert.setHeaderText("Konfiguration konnte nicht gespeichert werden");
-            alert.setContentText("Fehler: " + e.getMessage());
-            alert.showAndWait();
-        }
-    }
-    
-    /**
-     * NEU: Validiert die MetaTrader-Konfiguration
-     */
-    private boolean validateMetaTraderConfiguration() {
-        if (!metatraderSyncEnabledCheckBox.isSelected()) {
-            return true; // Deaktiviert = kein Problem
-        }
-        
-        String dirPath = metatraderDirField.getText().trim();
-        if (dirPath.isEmpty()) {
-            Alert alert = new Alert(Alert.AlertType.WARNING);
-            alert.setTitle("MetaTrader-Konfiguration unvollständig");
-            alert.setHeaderText("MetaTrader-Verzeichnis erforderlich");
-            alert.setContentText("Wenn die MetaTrader-Synchronisation aktiviert ist, muss ein gültiges Verzeichnis angegeben werden.\n\nBitte wählen Sie ein Verzeichnis aus oder deaktivieren Sie die Synchronisation.");
-            alert.showAndWait();
-            return false;
-        }
-        
-        File dir = new File(dirPath);
-        if (!dir.exists() || !dir.isDirectory() || !dir.canWrite()) {
-            Alert alert = new Alert(Alert.AlertType.WARNING);
-            alert.setTitle("Ungültiges MetaTrader-Verzeichnis");
-            alert.setHeaderText("MetaTrader-Verzeichnis nicht verwendbar");
-            alert.setContentText("Das angegebene Verzeichnis ist nicht gültig:\n" + dirPath + 
-                "\n\nProblem: " + 
-                (!dir.exists() ? "Verzeichnis existiert nicht" :
-                 !dir.isDirectory() ? "Pfad ist kein Verzeichnis" :
-                 "Verzeichnis ist nicht beschreibbar") +
-                "\n\nBitte testen Sie das Verzeichnis oder wählen Sie ein anderes aus.");
-            alert.showAndWait();
-            return false;
-        }
-        
-        return true;
-    }
-    
-    /**
-     * NEU: Konfiguriert die MetaTrader-Synchronisation im SignalChangeHistoryManager
-     */
-    private void configureMetaTraderSynchronization() {
-        try {
-            // Hole den SignalChangeHistoryManager über den EmailService
-            // (Da der EmailService möglicherweise eine Referenz darauf hat)
-            
-            // HINWEIS: Da die direkte Verbindung noch nicht implementiert ist,
-            // speichern wir die Konfiguration erstmal in einem separaten Weg
-            
-            if (metatraderSyncEnabledCheckBox.isSelected()) {
-                String dirPath = metatraderDirField.getText().trim();
-                
-                // TODO: Hier würde die Konfiguration an den SignalChangeHistoryManager weitergegeben
-                // Für jetzt: Logge die Konfiguration
-                LOGGER.info("MetaTrader-Synchronisation konfiguriert: " + dirPath);
-                updateMetaTraderStatus("✅ Konfiguriert und aktiv");
-                
-                appendStatus("- MetaTrader-Verzeichnis: " + dirPath + "\n");
-                appendStatus("- Datei-Synchronisation aktiviert\n");
-                
-            } else {
-                LOGGER.info("MetaTrader-Synchronisation deaktiviert");
-                updateMetaTraderStatus("Deaktiviert");
-                appendStatus("- MetaTrader-Synchronisation deaktiviert\n");
-            }
-            
-        } catch (Exception e) {
-            LOGGER.warning("Fehler beim Konfigurieren der MetaTrader-Synchronisation: " + e.getMessage());
-            updateMetaTraderStatus("❌ Konfigurationsfehler");
-            appendStatus("- Fehler bei MetaTrader-Konfiguration: " + e.getMessage() + "\n");
-        }
-    }
-    
-    /**
      * Aktualisiert die Konfiguration aus den UI-Feldern
-     * ERWEITERT um Signal-Threshold
+     * ERWEITERT: Speichert jetzt auch MetaTrader-Werte in EmailConfig
      */
     private void updateConfigFromFields() {
         // Server-Konfiguration
@@ -1138,8 +1002,11 @@ public class EmailConfigWindow {
         // Signal-Threshold
         emailConfig.setSignalChangeThreshold(signalThresholdSpinner.getValue());
         
-        // NEU: MetaTrader-Konfiguration (hier würde man normalerweise in EmailConfig speichern)
-        // TODO: EmailConfig um MetaTrader-Felder erweitern
+        // NEU: MetaTrader-Konfiguration in EmailConfig speichern
+        emailConfig.setMetatraderSyncEnabled(metatraderSyncEnabledCheckBox.isSelected());
+        emailConfig.setMetatraderDirectory(metatraderDirField.getText().trim());
+        
+        LOGGER.fine("Konfiguration aus UI-Feldern in EmailConfig übertragen (inkl. MetaTrader)");
     }
     
     /**
@@ -1148,6 +1015,193 @@ public class EmailConfigWindow {
     private EmailConfig.ValidationResult validateInputs() {
         updateConfigFromFields();
         return emailConfig.validateConfig();
+    }
+    
+    /**
+     * Validiert die MetaTrader-Konfiguration
+     * AKTUALISIERT: Verwendet EmailConfig-Validierung
+     */
+    private boolean validateMetaTraderConfiguration() {
+        // Aktualisiere EmailConfig mit aktuellen UI-Werten
+        emailConfig.setMetatraderSyncEnabled(metatraderSyncEnabledCheckBox.isSelected());
+        emailConfig.setMetatraderDirectory(metatraderDirField.getText().trim());
+        
+        if (!emailConfig.isMetatraderSyncEnabled()) {
+            return true; // Deaktiviert = kein Problem
+        }
+        
+        // Verwende EmailConfig-Validierung
+        if (!emailConfig.isMetaTraderSyncAvailable()) {
+            String dirPath = emailConfig.getMetatraderDirectory();
+            
+            if (dirPath.isEmpty()) {
+                showMetaTraderValidationAlert("MetaTrader-Konfiguration unvollständig", 
+                    "MetaTrader-Verzeichnis erforderlich",
+                    "Wenn die MetaTrader-Synchronisation aktiviert ist, muss ein gültiges Verzeichnis angegeben werden.\n\nBitte wählen Sie ein Verzeichnis aus oder deaktivieren Sie die Synchronisation.");
+                return false;
+            }
+            
+            File dir = new File(dirPath);
+            String problem = !dir.exists() ? "Verzeichnis existiert nicht" :
+                           !dir.isDirectory() ? "Pfad ist kein Verzeichnis" :
+                           "Verzeichnis ist nicht beschreibbar";
+            
+            showMetaTraderValidationAlert("Ungültiges MetaTrader-Verzeichnis", 
+                "MetaTrader-Verzeichnis nicht verwendbar",
+                "Das angegebene Verzeichnis ist nicht gültig:\n" + dirPath + 
+                "\n\nProblem: " + problem +
+                "\n\nBitte testen Sie das Verzeichnis oder wählen Sie ein anderes aus.");
+            return false;
+        }
+        
+        return true;
+    }
+    
+    /**
+     * Hilfsmethode für MetaTrader-Validierungs-Alerts
+     */
+    private void showMetaTraderValidationAlert(String title, String header, String content) {
+        Alert alert = new Alert(Alert.AlertType.WARNING);
+        alert.setTitle(title);
+        alert.setHeaderText(header);
+        alert.setContentText(content);
+        alert.showAndWait();
+    }
+    
+    /**
+     * Konfiguriert die MetaTrader-Synchronisation
+     * AKTUALISIERT: Verwendet jetzt EmailConfig als Single Source of Truth
+     */
+    private void configureMetaTraderSynchronization() {
+        try {
+            // Die Konfiguration ist bereits in EmailConfig gespeichert durch updateConfigFromFields()
+            // Hier erfolgt nur noch die Statusmeldung und eventuelle Callback-Behandlung
+            
+            if (emailConfig.isMetatraderSyncEnabled()) {
+                String dirPath = emailConfig.getMetatraderDirectory();
+                
+                // Prüfe Verfügbarkeit
+                if (emailConfig.isMetaTraderSyncAvailable()) {
+                    LOGGER.info("MetaTrader-Synchronisation erfolgreich konfiguriert: " + dirPath);
+                    updateMetaTraderStatus("✅ Konfiguriert und aktiv");
+                    
+                    appendStatus("- MetaTrader-Verzeichnis: " + dirPath + "\n");
+                    appendStatus("- Datei-Synchronisation aktiviert und verfügbar\n");
+                    appendStatus("- Ziel-Datei: last_known_signals.csv\n");
+                } else {
+                    LOGGER.warning("MetaTrader-Verzeichnis konfiguriert aber nicht verfügbar: " + dirPath);
+                    updateMetaTraderStatus("⚠️ Konfiguriert aber nicht verfügbar");
+                    
+                    appendStatus("- MetaTrader-Verzeichnis: " + dirPath + "\n");
+                    appendStatus("- WARNUNG: Verzeichnis nicht verfügbar!\n");
+                    appendStatus("- Synchronisation wird fehlschlagen\n");
+                }
+                
+            } else {
+                LOGGER.info("MetaTrader-Synchronisation deaktiviert");
+                updateMetaTraderStatus("Deaktiviert");
+                appendStatus("- MetaTrader-Synchronisation deaktiviert\n");
+            }
+            
+        } catch (Exception e) {
+            LOGGER.severe("Fehler beim Konfigurieren der MetaTrader-Synchronisation: " + e.getMessage());
+            updateMetaTraderStatus("❌ Konfigurationsfehler");
+            appendStatus("- Fehler bei MetaTrader-Konfiguration: " + e.getMessage() + "\n");
+        }
+    }
+    
+    /**
+     * Speichert die Konfiguration
+     * AKTUALISIERT: Verbesserte Integration und Statusmeldungen
+     */
+    private void saveConfiguration() {
+        try {
+            // Validiere alle Eingaben (inkl. MetaTrader)
+            EmailConfig.ValidationResult validation = validateInputs();
+            if (!validation.isValid()) {
+                Alert alert = new Alert(Alert.AlertType.WARNING);
+                alert.setTitle("Ungültige Eingaben");
+                alert.setHeaderText("Konfiguration kann nicht gespeichert werden");
+                alert.setContentText(validation.getErrorMessage());
+                alert.showAndWait();
+                return;
+            }
+            
+            // Zusätzliche UI-basierte MetaTrader-Validierung
+            if (!validateMetaTraderConfiguration()) {
+                return; // Fehler bereits angezeigt
+            }
+            
+            // Aktualisiere Konfiguration aus UI-Feldern (inkl. MetaTrader)
+            updateConfigFromFields();
+            
+            // Speichere komplette Konfiguration
+            emailConfig.saveConfig();
+            
+            // Aktualisiere E-Mail-Service
+            emailService.updateConfig(emailConfig);
+            
+            // Konfiguriere MetaTrader-Synchronisation
+            configureMetaTraderSynchronization();
+            
+            // MetaTrader-Konfiguration über Callback weiterleiten
+            if (metaTraderCallback != null) {
+                try {
+                    metaTraderCallback.configure(
+                        emailConfig.isMetatraderSyncEnabled(),
+                        emailConfig.getMetatraderDirectory()
+                    );
+                    LOGGER.info("MetaTrader-Konfiguration über Callback weitergeleitet");
+                } catch (Exception e) {
+                    LOGGER.warning("Fehler beim MetaTrader-Callback: " + e.getMessage());
+                    appendStatus("- Warnung: MetaTrader-Integration nicht vollständig aktiviert\n");
+                }
+            } else {
+                LOGGER.fine("Kein MetaTrader-Callback definiert - Konfiguration nur in EmailConfig gespeichert");
+            }
+            
+            // Erfolgreiche Speicherung protokollieren
+            appendStatus("💾 Konfiguration erfolgreich gespeichert\n");
+            appendStatus("- E-Mail-Benachrichtigungen: " + (emailConfig.isEmailEnabled() ? "Aktiviert" : "Deaktiviert") + "\n");
+            appendStatus("- Server: " + emailConfig.getSmtpHost() + ":" + emailConfig.getSmtpPort() + "\n");
+            appendStatus("- Signal-Threshold: " + emailConfig.getSignalChangeThreshold() + "%\n");
+            appendStatus("- MetaTrader-Sync: " + (emailConfig.isMetatraderSyncEnabled() ? "Aktiviert" : "Deaktiviert") + "\n");
+            if (emailConfig.isMetatraderSyncEnabled()) {
+                appendStatus("- MetaTrader-Verzeichnis: " + emailConfig.getMetatraderDirectory() + "\n");
+                appendStatus("- Synchronisation verfügbar: " + (emailConfig.isMetaTraderSyncAvailable() ? "Ja" : "Nein") + "\n");
+            }
+            appendStatus("- CSV-Speicherort: " + dataDirectory + "/signal_changes/\n\n");
+            
+            LOGGER.info("Konfiguration erfolgreich gespeichert - MetaTrader: " + 
+                       emailConfig.isMetatraderSyncEnabled() + 
+                       " (verfügbar: " + emailConfig.isMetaTraderSyncAvailable() + ")");
+            
+            // Erfolgsmeldung
+            String mtStatus = emailConfig.isMetatraderSyncEnabled() ? 
+                (emailConfig.isMetaTraderSyncAvailable() ? "Aktiviert und verfügbar" : "Aktiviert aber nicht verfügbar") : 
+                "Deaktiviert";
+                
+            Alert alert = new Alert(Alert.AlertType.INFORMATION);
+            alert.setTitle("Konfiguration gespeichert");
+            alert.setHeaderText("E-Mail-Konfiguration + MetaTrader-Sync erfolgreich gespeichert!");
+            alert.setContentText("Die Einstellungen wurden gespeichert und sind sofort aktiv.\n\n" +
+                "Signal-Threshold: " + emailConfig.getSignalChangeThreshold() + "%\n" +
+                "E-Mail-Benachrichtigungen: " + (emailConfig.isEmailEnabled() ? "Aktiviert" : "Deaktiviert") + "\n" +
+                "MetaTrader-Synchronisation: " + mtStatus + "\n" +
+                "CSV-Speicherort: " + dataDirectory + "/signal_changes/\n" +
+                (emailConfig.isMetatraderSyncEnabled() ? 
+                    "\nSynchronisierte Datei: " + emailConfig.getMetatraderDirectory() + "\\last_known_signals.csv" : ""));
+            alert.showAndWait();
+            
+        } catch (Exception e) {
+            LOGGER.severe("Fehler beim Speichern der Konfiguration: " + e.getMessage());
+            
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Speicherfehler");
+            alert.setHeaderText("Konfiguration konnte nicht gespeichert werden");
+            alert.setContentText("Fehler: " + e.getMessage());
+            alert.showAndWait();
+        }
     }
     
     /**
@@ -1184,7 +1238,7 @@ public class EmailConfigWindow {
     }
     
     /**
-     * NEU: Setzt den Callback für MetaTrader-Konfiguration
+     * Setzt den Callback für MetaTrader-Konfiguration
      * @param callback Callback-Interface für MetaTrader-Konfiguration
      */
     public void setMetaTraderConfigurationCallback(MetaTraderConfigurationCallback callback) {
@@ -1221,20 +1275,20 @@ public class EmailConfigWindow {
     }
     
     /**
-     * NEU: Gibt das konfigurierte MetaTrader-Verzeichnis zurück
+     * Gibt das konfigurierte MetaTrader-Verzeichnis zurück
      */
     public String getMetaTraderDirectory() {
-        if (metatraderSyncEnabledCheckBox.isSelected()) {
-            return metatraderDirField.getText().trim();
+        if (emailConfig.isMetatraderSyncEnabled()) {
+            return emailConfig.getMetatraderDirectory();
         }
         return null;
     }
     
     /**
-     * NEU: Prüft ob MetaTrader-Synchronisation aktiviert ist
+     * Prüft ob MetaTrader-Synchronisation aktiviert ist
      */
     public boolean isMetaTraderSyncEnabled() {
-        return metatraderSyncEnabledCheckBox.isSelected() && 
-               !metatraderDirField.getText().trim().isEmpty();
+        return emailConfig.isMetatraderSyncEnabled() && 
+               emailConfig.isMetaTraderSyncAvailable();
     }
 }
