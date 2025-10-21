@@ -6,6 +6,7 @@ import javafx.scene.image.Image;
 import javafx.stage.Stage;
 import java.util.logging.Logger;
 import java.util.logging.Level;
+import com.fxssi.extractor.util.AppVersion;
 
 /**
  * JavaFX Hauptklasse für die FXSSI Data Extractor GUI
@@ -75,12 +76,12 @@ public class FXSSIGuiApplication extends Application {
      * Konfiguriert das Hauptfenster mit erweiterten Abmessungen
      */
     private void setupPrimaryStage(Stage primaryStage, Scene scene) {
-        // Titel mit Datenverzeichnis-Info erweitern
-        String titleWithPath = WINDOW_TITLE;
+        // Titel mit Version und Datenverzeichnis-Info erweitern
+        String titleWithPath = WINDOW_TITLE + " - " + AppVersion.getShortVersionInfo();
         if (!configuredDataDirectory.equals(DEFAULT_DATA_DIRECTORY)) {
             titleWithPath += " - Datenverzeichnis: " + configuredDataDirectory;
         }
-        
+
         primaryStage.setTitle(titleWithPath);
         primaryStage.setScene(scene);
         primaryStage.setMinWidth(MIN_WINDOW_WIDTH);

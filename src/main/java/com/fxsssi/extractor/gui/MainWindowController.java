@@ -11,6 +11,7 @@ import com.fxssi.extractor.model.CurrencyPairData;
 import com.fxssi.extractor.model.SignalChangeEvent;
 import com.fxssi.extractor.notification.EmailConfig;
 import com.fxssi.extractor.notification.EmailService;
+import com.fxssi.extractor.util.AppVersion;
 
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -198,7 +199,7 @@ public class MainWindowController {
         titleBar.setPadding(new Insets(10, 20, 10, 20));
         titleBar.getStyleClass().add("title-bar");
         
-        Label titleLabel = new Label("FXSSI Live Sentiment Monitor mit Signalwechsel + E-Mail-Benachrichtigungen + ERWEITERTE ANSICHT");
+        Label titleLabel = new Label("FXSSI Live Sentiment Monitor " + AppVersion.getShortVersionInfo() + " - Signalwechsel + E-Mail + Charts");
         titleLabel.setFont(Font.font("System", FontWeight.BOLD, 22));
         titleLabel.getStyleClass().add("title-label");
         
@@ -697,7 +698,7 @@ public class MainWindowController {
         bottomArea.setPadding(new Insets(5, 20, 5, 20));
         bottomArea.getStyleClass().add("status-bar");
         
-        Label appInfo = new Label("FXSSI Data Extractor v1.7");
+        Label appInfo = new Label("FXSSI Data Extractor " + AppVersion.getShortVersionInfo());
         appInfo.setFont(Font.font(10));
         appInfo.getStyleClass().add("app-info");
         
