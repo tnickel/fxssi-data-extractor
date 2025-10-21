@@ -27,9 +27,10 @@ import java.util.stream.Collectors;
  * Erkennt automatisch Signalwechsel und speichert sie persistent
  * ERWEITERT um EmailService-Integration mit Threshold-basierter E-Mail-Versendung
  * ERWEITERT um MetaTrader-Datei-Synchronisation
+ * FIXED: MetaTrader-Sync wird jetzt bei JEDEM Refresh ausgeführt
  * 
  * @author Generated for FXSSI Signal Change Detection
- * @version 1.2 - MetaTrader-Datei-Synchronisation
+ * @version 1.2.1 - FIX: MetaTrader-Sync bei jedem Refresh
  */
 public class SignalChangeHistoryManager {
     
@@ -238,6 +239,7 @@ public class SignalChangeHistoryManager {
     /**
      * HAUPTMETHODE: Verarbeitet neue Währungsdaten und erkennt Signalwechsel
      * ERWEITERT um Threshold-basierte E-Mail-Versendung
+     * ✅ FIXED: MetaTrader-Sync wird jetzt IMMER ausgeführt (auch ohne Signalwechsel)
      * @param newData Liste der neuen Währungsdaten
      * @return Liste der erkannten Signalwechsel
      */
@@ -286,16 +288,15 @@ public class SignalChangeHistoryManager {
                 // Aktualisiere Cache
                 updateChangeHistoryCache(detectedChanges);
                 
-                // Speichere aktuelle Signale (inkl. MetaTrader-Sync)
-                saveLastKnownSignals();
-                
                 LOGGER.info("Signalwechsel-Verarbeitung abgeschlossen: " + detectedChanges.size() + " Wechsel erkannt");
             } else {
                 LOGGER.fine("Keine Signalwechsel erkannt");
-                
-                // Speichere trotzdem aktuelle Signale falls neue Währungspaare hinzugekommen sind (inkl. MetaTrader-Sync)
-                saveLastKnownSignals();
             }
+            
+            // ✅ FIX: IMMER speichern und synchronisieren, auch ohne Signalwechsel
+            // Dies stellt sicher dass bei jedem Refresh (auch ohne Signalwechsel) 
+            // die MetaTrader-Datei aktualisiert wird
+            saveLastKnownSignals();
             
             // Threshold-basierte E-Mail-Versendung
             if (emailNotificationsEnabled && emailService != null) {
@@ -596,11 +597,14 @@ public class SignalChangeHistoryManager {
     
     /**
      * Speichert die letzten bekannten Signale
-     * ERWEITERT um MetaTrader-Synchronisation
+     * ERWEITERT um MetaTrader-Synchronisation mit verbessertem Logging
+     * ✅ Diese Methode ruft IMMER syncLastKnownSignalsToMetaTrader() auf
      */
     private void saveLastKnownSignals() {
         try {
             createSignalChangesDirectory();
+            
+            LOGGER.info("Speichere " + lastKnownSignals.size() + " letzte bekannte Signale...");
             
             try (BufferedWriter writer = Files.newBufferedWriter(lastSignalsFilePath, StandardCharsets.UTF_8)) {
                 writer.write("Währungspaar;Letztes_Signal");
@@ -615,8 +619,9 @@ public class SignalChangeHistoryManager {
             }
             
             LOGGER.fine("Letzte bekannte Signale gespeichert: " + lastKnownSignals.size() + " Währungspaare");
+            LOGGER.info("✅ Datei last_known_signals.csv erfolgreich geschrieben");
             
-            // NEU: Synchronisiere mit MetaTrader-Verzeichnis
+            // ✅ WICHTIG: Synchronisiere IMMER mit MetaTrader nach dem Speichern
             syncLastKnownSignalsToMetaTrader();
             
         } catch (IOException e) {
@@ -627,33 +632,38 @@ public class SignalChangeHistoryManager {
     /**
      * NEU: Synchronisiert die last_known_signals.csv ins MetaTrader-Verzeichnis
      * ERWEITERT um Währungspaar-Konvertierung für MetaTrader-Kompatibilität
+     * VERBESSERT: Detailliertes Logging für jeden Synchronisationsvorgang
      */
     private void syncLastKnownSignalsToMetaTrader() {
         if (!metatraderSyncEnabled || metatraderFileDir == null) {
-            LOGGER.fine("MetaTrader-Synchronisation deaktiviert oder nicht konfiguriert");
+            LOGGER.fine("MetaTrader-Synchronisation übersprungen (deaktiviert oder nicht konfiguriert)");
             return;
         }
+        
+        LOGGER.info("🔄 Starte MetaTrader-Synchronisation...");
+        LOGGER.info("   Zielverzeichnis: " + metatraderFileDir);
+        LOGGER.info("   Anzahl Signale: " + lastKnownSignals.size());
         
         try {
             Path mtDir = Paths.get(metatraderFileDir);
             
             // Prüfe Verzeichnis erneut vor Synchronisation
             if (!Files.exists(mtDir)) {
-                LOGGER.warning("MetaTrader-Verzeichnis existiert nicht mehr: " + mtDir.toAbsolutePath() + 
+                LOGGER.warning("❌ MetaTrader-Verzeichnis existiert nicht mehr: " + mtDir.toAbsolutePath() + 
                               " - Deaktiviere Synchronisation");
                 metatraderSyncEnabled = false;
                 return;
             }
             
             if (!Files.isDirectory(mtDir)) {
-                LOGGER.warning("MetaTrader-Pfad ist kein Verzeichnis: " + mtDir.toAbsolutePath() + 
+                LOGGER.warning("❌ MetaTrader-Pfad ist kein Verzeichnis: " + mtDir.toAbsolutePath() + 
                               " - Deaktiviere Synchronisation");
                 metatraderSyncEnabled = false;
                 return;
             }
             
             if (!Files.isWritable(mtDir)) {
-                LOGGER.warning("MetaTrader-Verzeichnis ist nicht beschreibbar: " + mtDir.toAbsolutePath() + 
+                LOGGER.warning("❌ MetaTrader-Verzeichnis ist nicht beschreibbar: " + mtDir.toAbsolutePath() + 
                               " - Deaktiviere Synchronisation");
                 metatraderSyncEnabled = false;
                 return;
@@ -661,7 +671,7 @@ public class SignalChangeHistoryManager {
             
             // Prüfe ob Quelldatei existiert
             if (!Files.exists(lastSignalsFilePath)) {
-                LOGGER.fine("Quelldatei last_known_signals.csv existiert noch nicht - keine Synchronisation");
+                LOGGER.fine("ℹ️ Quelldatei last_known_signals.csv existiert noch nicht - keine Synchronisation");
                 return;
             }
             
@@ -669,31 +679,36 @@ public class SignalChangeHistoryManager {
             Path tmpFile = mtDir.resolve("last_known_signals_tmp.csv");
             Path targetFile = mtDir.resolve(LAST_SIGNALS_FILE);
             
+            LOGGER.info("   Temporäre Datei: " + tmpFile.getFileName());
+            LOGGER.info("   Ziel-Datei: " + targetFile.getFileName());
+            
             // Schritt 1: Erstelle temporäre Datei mit konvertierten Währungspaaren
             createConvertedMetaTraderFile(tmpFile);
             
             // Schritt 2: Benenne temporäre Datei um zur finalen Datei
             Files.move(tmpFile, targetFile, StandardCopyOption.REPLACE_EXISTING);
             
-            LOGGER.info("MetaTrader-Datei erfolgreich synchronisiert mit Währungskonvertierung: " + 
-                       targetFile.toAbsolutePath());
-            LOGGER.fine("Konvertierungen: EUR/USD→EURUSD, XAUUSD→GOLD, XAGUSD→SILVER");
+            LOGGER.info("✅ MetaTrader-Datei erfolgreich synchronisiert!");
+            LOGGER.info("   Datei: " + targetFile.toAbsolutePath());
+            LOGGER.info("   Währungspaare konvertiert (EUR/USD→EURUSD, XAUUSD→GOLD, XAGUSD→SILVER)");
+            LOGGER.info("   Synchronisation abgeschlossen");
             
         } catch (IOException e) {
-            LOGGER.log(Level.WARNING, "Fehler bei MetaTrader-Synchronisation: " + e.getMessage(), e);
+            LOGGER.log(Level.WARNING, "❌ Fehler bei MetaTrader-Synchronisation: " + e.getMessage(), e);
             LOGGER.warning("MetaTrader-Synchronisation aufgrund von Fehlern temporär deaktiviert");
             // Nicht dauerhaft deaktivieren, da es temporäre I/O-Probleme sein könnten
         } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "Unerwarteter Fehler bei MetaTrader-Synchronisation: " + e.getMessage(), e);
+            LOGGER.log(Level.WARNING, "❌ Unerwarteter Fehler bei MetaTrader-Synchronisation: " + e.getMessage(), e);
         }
     }
     
     /**
      * NEU: Erstellt die MetaTrader-kompatible Datei mit konvertierten Währungspaaren
+     * ERWEITERT: Detailliertes Logging für Konvertierungen
      * @param tmpFilePath Pfad zur temporären Datei im MetaTrader-Verzeichnis
      */
     private void createConvertedMetaTraderFile(Path tmpFilePath) throws IOException {
-        LOGGER.fine("Erstelle MetaTrader-kompatible Datei: " + tmpFilePath.getFileName());
+        LOGGER.info("📝 Erstelle MetaTrader-kompatible Datei: " + tmpFilePath.getFileName());
         
         try (BufferedWriter writer = Files.newBufferedWriter(tmpFilePath, StandardCharsets.UTF_8)) {
             // Header schreiben (konvertiert)
@@ -715,19 +730,22 @@ public class SignalChangeHistoryManager {
                 totalCount++;
                 if (!originalPair.equals(convertedPair)) {
                     convertedCount++;
-                    LOGGER.fine("Konvertiert: " + originalPair + " → " + convertedPair);
+                    LOGGER.fine("   Konvertiert: " + originalPair + " → " + convertedPair);
                 }
             }
             
             writer.flush();
             
-            LOGGER.info("MetaTrader-Datei erstellt: " + totalCount + " Währungspaare, " + 
-                       convertedCount + " konvertiert");
+            LOGGER.info("✅ MetaTrader-Datei erstellt:");
+            LOGGER.info("   Gesamt: " + totalCount + " Währungspaare");
+            LOGGER.info("   Konvertiert: " + convertedCount + " Währungspaare");
+            LOGGER.info("   Unverändert: " + (totalCount - convertedCount) + " Währungspaare");
         }
     }
     
     /**
      * NEU: Konvertiert Währungspaare für MetaTrader-Kompatibilität
+     * ERWEITERT: Logging für spezielle Konvertierungen
      * @param originalPair Ursprüngliches Währungspaar (z.B. "EUR/USD")
      * @return MetaTrader-kompatibles Währungspaar (z.B. "EURUSD")
      */
@@ -744,9 +762,11 @@ public class SignalChangeHistoryManager {
         // Schritt 2: Spezielle Konvertierungen für Edelmetalle
         switch (converted.toUpperCase()) {
             case "XAUUSD":
+                LOGGER.fine("   Spezialkonvertierung: XAUUSD → GOLD");
                 converted = "GOLD";
                 break;
             case "XAGUSD":
+                LOGGER.fine("   Spezialkonvertierung: XAGUSD → SILVER");
                 converted = "SILVER";
                 break;
             // Weitere spezielle Konvertierungen können hier hinzugefügt werden

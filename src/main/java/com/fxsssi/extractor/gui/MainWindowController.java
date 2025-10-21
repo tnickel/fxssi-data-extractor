@@ -269,7 +269,7 @@ public class MainWindowController {
         intervalLabel.getStyleClass().add("toolbar-label");
         
         // Intervall Spinner
-        refreshIntervalSpinner = new Spinner<>(1, 60, 5);
+        refreshIntervalSpinner = new Spinner<>(1, 60, 15);
         refreshIntervalSpinner.setPrefWidth(80);
         refreshIntervalSpinner.getStyleClass().add("interval-spinner");
         refreshIntervalSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
@@ -954,14 +954,17 @@ public class MainWindowController {
                 // *** NEU: Signalwechsel-Benachrichtigungen per E-Mail versenden ***
                 sendSignalChangeNotificationsIfEnabled();
                 
+                // ✅ NEU: DIREKTE MetaTrader-Synchronisation nach jedem Refresh
+                syncMetaTraderAfterRefresh();
+                
                 Platform.runLater(() -> {
                     updateTableData(data);
-                    updateStatus("Daten aktualisiert (" + data.size() + " Währungspaare) - Signalwechsel erkannt + E-Mail geprüft (ERWEITERTE ANSICHT)");
+                    updateStatus("Daten aktualisiert (" + data.size() + " Währungspaare) - Signalwechsel erkannt + E-Mail geprüft + MetaTrader sync (ERWEITERTE ANSICHT)");
                     
                     // *** FIX: Null-Check für lastUpdateLabel hinzugefügt ***
                     if (lastUpdateLabel != null) {
                         lastUpdateLabel.setText("Letzte Aktualisierung: " + 
-                            java.time.LocalTime.now().format(TIME_FORMATTER) + " (mit Signalwechsel + E-Mail-Check + ERWEITERTE BALKEN)");
+                            java.time.LocalTime.now().format(TIME_FORMATTER) + " (mit Signalwechsel + E-Mail-Check + MetaTrader-Sync + ERWEITERTE BALKEN)");
                     }
                     
                     refreshButton.setDisable(false);
@@ -979,7 +982,7 @@ public class MainWindowController {
                     refreshChartColumns();
                 });
                 
-                LOGGER.info("GUI-Refresh abgeschlossen: " + data.size() + " Datensätze + Signalwechsel + E-Mail-Check (ERWEITERTE ANSICHT)");
+                LOGGER.info("GUI-Refresh abgeschlossen: " + data.size() + " Datensätze + Signalwechsel + E-Mail-Check + MetaTrader-Sync (ERWEITERTE ANSICHT)");
                 
             } catch (Exception e) {
                 LOGGER.log(Level.WARNING, "Fehler beim Laden der Daten: " + e.getMessage(), e);
@@ -1310,6 +1313,88 @@ public class MainWindowController {
                     }
                 };
             }
+        }
+    }
+    private void syncMetaTraderAfterRefresh() {
+        try {
+            // ✅ SCHRITT 1: Lade EmailConfig neu um aktuelle MetaTrader-Einstellungen zu bekommen
+            if (emailConfig == null) {
+                emailConfig = new EmailConfig(dataDirectory);
+            }
+            emailConfig.loadConfig();
+            
+            // ✅ SCHRITT 2: Prüfe ob MetaTrader-Sync in der Config aktiviert ist
+            boolean isMetaTraderEnabled = emailConfig.isMetatraderSyncEnabled();
+            String metatraderDir = emailConfig.getMetatraderDirectory();
+            
+            LOGGER.info("📋 MetaTrader-Sync-Check nach Refresh:");
+            LOGGER.info("   - Aktiviert (EmailConfig): " + isMetaTraderEnabled);
+            LOGGER.info("   - Verzeichnis (EmailConfig): " + (metatraderDir != null ? metatraderDir : "nicht gesetzt"));
+            
+            if (!isMetaTraderEnabled) {
+                LOGGER.fine("MetaTrader-Synchronisation deaktiviert - übersprungen");
+                return;
+            }
+            
+            if (metatraderDir == null || metatraderDir.trim().isEmpty()) {
+                LOGGER.warning("MetaTrader-Synchronisation aktiviert, aber kein Verzeichnis konfiguriert!");
+                return;
+            }
+            
+            // ✅ SCHRITT 3: Hole SignalChangeHistoryManager
+            if (dataService == null || dataService.getSignalChangeHistoryManager() == null) {
+                LOGGER.warning("SignalChangeHistoryManager nicht verfügbar - kann nicht synchronisieren");
+                return;
+            }
+            
+            var signalChangeManager = dataService.getSignalChangeHistoryManager();
+            
+            // ✅ SCHRITT 4: Setze MetaTrader-Verzeichnis falls nicht bereits gesetzt
+            String currentDir = signalChangeManager.getMetatraderFileDir();
+            boolean currentlyEnabled = signalChangeManager.isMetatraderSyncEnabled();
+            
+            LOGGER.info("   - Aktiviert (SignalChangeManager): " + currentlyEnabled);
+            LOGGER.info("   - Verzeichnis (SignalChangeManager): " + (currentDir != null ? currentDir : "nicht gesetzt"));
+            
+            // Wenn nicht synchron mit EmailConfig, dann setze es neu
+            if (!metatraderDir.equals(currentDir) || !currentlyEnabled) {
+                LOGGER.info("🔧 Synchronisiere SignalChangeManager mit EmailConfig...");
+                try {
+                    signalChangeManager.setMetatraderFileDir(metatraderDir);
+                    LOGGER.info("✅ SignalChangeManager erfolgreich konfiguriert: " + metatraderDir);
+                } catch (Exception e) {
+                    LOGGER.warning("❌ Konnte MetaTrader-Verzeichnis nicht setzen: " + e.getMessage());
+                    return;
+                }
+            }
+            
+            // ✅ SCHRITT 5: Rufe die Synchronisation direkt auf
+            LOGGER.info("🔄 Führe MetaTrader-Synchronisation nach Refresh aus...");
+            
+            try {
+                // Versuche die Sync-Methode direkt aufzurufen
+                java.lang.reflect.Method syncMethod = signalChangeManager.getClass()
+                    .getDeclaredMethod("syncLastKnownSignalsToMetaTrader");
+                syncMethod.setAccessible(true);
+                syncMethod.invoke(signalChangeManager);
+                
+                LOGGER.info("✅ MetaTrader-Synchronisation nach Refresh abgeschlossen");
+                
+            } catch (NoSuchMethodException e) {
+                LOGGER.info("⚠️ Verwende Fallback-Methode für Synchronisation...");
+                
+                // FALLBACK: Triggere über saveLastKnownSignals()
+                java.lang.reflect.Method saveMethod = signalChangeManager.getClass()
+                    .getDeclaredMethod("saveLastKnownSignals");
+                saveMethod.setAccessible(true);
+                saveMethod.invoke(signalChangeManager);
+                
+                LOGGER.info("✅ MetaTrader-Synchronisation via Fallback abgeschlossen");
+            }
+            
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "❌ Fehler bei MetaTrader-Synchronisation nach Refresh: " + e.getMessage(), e);
+            // Fehler nicht weiterwerfen - Refresh soll trotzdem funktionieren
         }
     }
 }
