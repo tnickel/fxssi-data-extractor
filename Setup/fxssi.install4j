@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <install4j version="8.0.11" transformSequenceNumber="8">
   <directoryPresets config="D:/git/eclipse-workspace2025/fxssi-data-extractor/Setup/pictures" />
-  <application name="FXSSI" applicationId="0328-3250-6084-3097" mediaDir="//ds918/Forex/tmp" compression="1" shortName="FXSSI" publisher="Thomas Nickel" publisherWeb="https://monitortool.jimdofree.com/" version="0.1.1" autoSave="true" macVolumeId="b47bb94d2307a995" javaMinVersion="17" javaMaxVersion="21" />
+  <application name="FXSSI" applicationId="0328-3250-6084-3097" mediaDir="//ds918/Forex/tmp" compression="1" shortName="FXSSI" publisher="Thomas Nickel" publisherWeb="https://monitortool.jimdofree.com/" version="0.1.2" autoSave="true" macVolumeId="b47bb94d2307a995" javaMinVersion="17" javaMaxVersion="21" />
   <files>
     <mountPoints>
       <mountPoint id="115" />
@@ -143,7 +143,7 @@ String winprgdir=(String)context.getVariable("sys.programFilesDir");
 String windprgdata=(String)context.getVariable("sys.programDataDir");
 
 
- instdir="C:\\Forex\\FXSSI"; 
+ //instdir="C:\\Forex\\FXSSI"; 
 configurationObject.setText(instdir);
 
 </initScript>
@@ -181,6 +181,19 @@ return true; </property>
                 </serializedBean>
               </action>
               <action id="17" beanClass="com.install4j.runtime.beans.actions.InstallFilesAction" actionElevationType="elevated" rollbackBarrierExitCode="0" failureStrategy="quit" errorMessage="${i18n:FileCorrupted}" />
+              <action id="755" beanClass="com.install4j.runtime.beans.actions.control.SetVariableAction" rollbackBarrierExitCode="0">
+                <serializedBean>
+                  <property name="script">
+                    <object class="com.install4j.api.beans.ScriptProperty">
+                      <property name="value" type="string">String instDir = (String) context.getVariable("sys.installationDir");
+String lastDir = new java.io.File(instDir).getName();
+return (lastDir);
+</property>
+                    </object>
+                  </property>
+                  <property name="variableName" type="string">installer:appFolderName</property>
+                </serializedBean>
+              </action>
               <action id="19" beanClass="com.install4j.runtime.beans.actions.desktop.RegisterAddRemoveAction" actionElevationType="elevated" rollbackBarrierExitCode="0">
                 <serializedBean>
                   <property name="itemName" type="string">${compiler:sys.fullName} ${compiler:sys.version}</property>
@@ -193,7 +206,7 @@ return true; </property>
                       <string>${installer:sys.installationDir}/bin/StartFxssi.bat</string>
                     </object>
                   </property>
-                  <property name="name" type="string">FXSSI</property>
+                  <property name="name" type="string">${installer:installer:appFolderName}</property>
                 </serializedBean>
               </action>
               <action name="MqlDownloaderApp" id="753" beanClass="com.install4j.runtime.beans.actions.desktop.CreateDesktopLinkAction" actionElevationType="elevated" rollbackBarrierExitCode="0" multiExec="true">
@@ -204,6 +217,19 @@ return true; </property>
                     </object>
                   </property>
                   <property name="name" type="string">MqlDownloader</property>
+                </serializedBean>
+              </action>
+              <action id="754" beanClass="com.install4j.runtime.beans.actions.text.ReplaceInstallerVariablesAction" actionElevationType="elevated" rollbackBarrierExitCode="0" failureStrategy="askQuit" errorMessage="Cant replace variables in  ${installer:sys.installationDir}\bin\StartFxssi.bat">
+                <serializedBean>
+                  <property name="encoding" type="string" />
+                  <property name="files" type="array" class="java.io.File" length="1">
+                    <element index="0">
+                      <object class="java.io.File">
+                        <string>${installer:sys.installationDir}/bin/StartFxssi.bat</string>
+                      </object>
+                    </element>
+                  </property>
+                  <property name="ignoreMissing" type="boolean" value="false" />
                 </serializedBean>
               </action>
             </actions>
