@@ -7,6 +7,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -15,30 +16,38 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import java.util.stream.Collectors;
 
 import com.fxssi.extractor.model.CurrencyPairData;
+import com.fxssi.extractor.notification.EmailConfig;
 
 /**
  * Manager für die Verwaltung der zuletzt gesendeten E-Mail-Signale
  * Verhindert E-Mail-Spam durch Tracking der letzten gesendeten Signale pro Währungspaar
  * Verwendet einen konfigurierbaren Threshold um zu entscheiden ob eine neue E-Mail gesendet werden soll
+ * ERWEITERT um MetaTrader-Synchronisation mit Dual-Directory-Support
  * 
  * @author Generated for FXSSI Email Anti-Spam System
- * @version 1.0
+ * @version 1.1 - MetaTrader Dual-Directory Sync
  */
 public class LastSentSignalManager {
     
     private static final Logger LOGGER = Logger.getLogger(LastSentSignalManager.class.getName());
     private static final String SIGNAL_CHANGES_SUBDIRECTORY = "signal_changes";
     private static final String LAST_SENT_FILE = "lastsend.csv";
+    private static final String MT_SYNC_FILE = "last_known_signals.csv"; // NEU: MetaTrader-Sync-Datei
     
     private final String dataDirectory;
     private final Path signalChangesPath;
     private final Path lastSentFilePath;
+    private final Path mtSyncFilePath; // NEU: Pfad zur MetaTrader-Sync-Datei
     private final ReentrantLock managerLock = new ReentrantLock();
     
     // Cache für zuletzt gesendete Signale pro Währungspaar
     private final ConcurrentHashMap<String, LastSentSignal> lastSentSignals;
+    
+    // NEU: Referenz zur EmailConfig für MetaTrader-Sync
+    private EmailConfig emailConfig;
     
     /**
      * Konstruktor mit Standard-Datenverzeichnis
@@ -55,11 +64,23 @@ public class LastSentSignalManager {
         this.dataDirectory = dataDirectory;
         this.signalChangesPath = Paths.get(dataDirectory, SIGNAL_CHANGES_SUBDIRECTORY);
         this.lastSentFilePath = signalChangesPath.resolve(LAST_SENT_FILE);
+        this.mtSyncFilePath = signalChangesPath.resolve(MT_SYNC_FILE); // NEU
         
         this.lastSentSignals = new ConcurrentHashMap<>();
         
         LOGGER.info("LastSentSignalManager initialisiert für Verzeichnis: " + dataDirectory);
         LOGGER.info("Letzte gesendete Signale werden gespeichert in: " + lastSentFilePath.toAbsolutePath());
+        LOGGER.info("MetaTrader-Sync-Datei: " + mtSyncFilePath.toAbsolutePath());
+    }
+    
+    /**
+     * NEU: Setzt die EmailConfig für MetaTrader-Synchronisation
+     * @param emailConfig Die E-Mail-Konfiguration mit MetaTrader-Verzeichnissen
+     */
+    public void setEmailConfig(EmailConfig emailConfig) {
+        this.emailConfig = emailConfig;
+        LOGGER.info("EmailConfig für MetaTrader-Sync gesetzt (Sync: " + 
+                   (emailConfig != null && emailConfig.isMetatraderSyncEnabled()) + ")");
     }
     
     /**
@@ -156,6 +177,7 @@ public class LastSentSignalManager {
             LOGGER.info("=== DEBUG: loadLastSentSignals beendet ===");
         }
     }
+    
     /**
      * HAUPTMETHODE: Prüft ob eine E-Mail für ein neues Signal gesendet werden soll
      * @param currencyPair Das Währungspaar
@@ -179,25 +201,289 @@ public class LastSentSignalManager {
                 return true;
             }
             
-            // Wenn gleiches Signal wie zuletzt gesendet, keine E-Mail
-            if (lastSent.getSignal() == newSignal) {
-                LOGGER.fine(String.format("Gleiches Signal für %s: %s - keine E-Mail", 
-                    currencyPair, newSignal.getDescription()));
+            // Berechne die Differenz zwischen neuem und letztem Wert
+            double buyPercentDiff = Math.abs(newBuyPercentage - lastSent.getBuyPercentage());
+            
+            // Prüfe ob Threshold erreicht
+            boolean thresholdReached = buyPercentDiff >= thresholdPercent;
+            
+            if (thresholdReached) {
+                LOGGER.info(String.format("Threshold erreicht für %s: %.1f%% → %.1f%% (Differenz: %.1f%% >= %.1f%%)", 
+                    currencyPair, lastSent.getBuyPercentage(), newBuyPercentage, buyPercentDiff, thresholdPercent));
+            } else {
+                LOGGER.fine(String.format("Threshold NICHT erreicht für %s: %.1f%% → %.1f%% (Differenz: %.1f%% < %.1f%%)", 
+                    currencyPair, lastSent.getBuyPercentage(), newBuyPercentage, buyPercentDiff, thresholdPercent));
+            }
+            
+            return thresholdReached;
+            
+        } finally {
+            managerLock.unlock();
+        }
+    }
+    
+    /**
+     * Registriert ein gesendetes Signal
+     * ERWEITERT um automatische MetaTrader-Synchronisation
+     * 
+     * @param currencyPair Das Währungspaar
+     * @param signal Das gesendete Signal
+     * @param buyPercentage Die Buy-Percentage zum Zeitpunkt der E-Mail
+     */
+    public void recordSentSignal(String currencyPair, 
+                                CurrencyPairData.TradingSignal signal, 
+                                double buyPercentage) {
+        managerLock.lock();
+        try {
+            LastSentSignal lastSent = new LastSentSignal(
+                currencyPair, 
+                signal, 
+                buyPercentage, 
+                LocalDateTime.now()
+            );
+            
+            lastSentSignals.put(currencyPair, lastSent);
+            
+            LOGGER.info(String.format("Signal registriert: %s - %s (%.1f%%)", 
+                currencyPair, signal.getDescription(), buyPercentage));
+            
+            // Speichere in lastsend.csv
+            saveLastSentSignals();
+            
+            // NEU: Synchronisiere zu MetaTrader-Verzeichnissen
+            syncToMetaTraderDirectories();
+            
+        } finally {
+            managerLock.unlock();
+        }
+    }
+    
+    /**
+     * NEU: Synchronisiert die Signale zu MetaTrader-Verzeichnissen
+     * Erstellt last_known_signals.csv im Format: Währungspaar;Letztes_Signal;Prozent
+     * Kopiert die Datei in 1 oder 2 Verzeichnisse abhängig von der Konfiguration
+     * Führt Währungsersetzung durch: XAUUSD → GOLD, XAGUSD → SILBER
+     */
+    private void syncToMetaTraderDirectories() {
+        // Prüfe ob MetaTrader-Sync aktiviert ist
+        if (emailConfig == null || !emailConfig.isMetatraderSyncEnabled()) {
+            LOGGER.fine("MetaTrader-Sync nicht aktiviert - überspringe Synchronisation");
+            return;
+        }
+        
+        try {
+            // Erstelle die MetaTrader-Sync-Datei im lokalen Verzeichnis
+            createMetaTraderSyncFile();
+            
+            // Kopiere zu konfigurierten Verzeichnissen
+            int copiedCount = 0;
+            
+            // Verzeichnis 1
+            if (emailConfig.hasMetatraderDirectory()) {
+                String dir1 = emailConfig.getMetatraderDirectory();
+                if (copyToMetaTraderDirectory(dir1, "Verzeichnis 1")) {
+                    copiedCount++;
+                }
+            }
+            
+            // Verzeichnis 2
+            if (emailConfig.hasMetatraderDirectory2()) {
+                String dir2 = emailConfig.getMetatraderDirectory2();
+                if (copyToMetaTraderDirectory(dir2, "Verzeichnis 2")) {
+                    copiedCount++;
+                }
+            }
+            
+            if (copiedCount > 0) {
+                LOGGER.info("MetaTrader-Sync erfolgreich: " + copiedCount + " Verzeichnis" + 
+                           (copiedCount > 1 ? "se" : "") + " aktualisiert");
+            } else {
+                LOGGER.warning("MetaTrader-Sync aktiviert, aber kein Verzeichnis konfiguriert oder Kopieren fehlgeschlagen");
+            }
+            
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Fehler bei MetaTrader-Synchronisation: " + e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * NEU: Erstellt die MetaTrader-Sync-Datei im lokalen Verzeichnis
+     */
+    private void createMetaTraderSyncFile() throws IOException {
+        createSignalChangesDirectory();
+        
+        try (BufferedWriter writer = Files.newBufferedWriter(mtSyncFilePath, StandardCharsets.UTF_8)) {
+            // Schreibe Header (OHNE Zeitstempel!)
+            writer.write("Währungspaar;Letztes_Signal;Prozent");
+            writer.newLine();
+            
+            // Schreibe alle Signale
+            for (LastSentSignal signal : lastSentSignals.values()) {
+                String currencyPair = signal.getCurrencyPair();
+                
+                // NEU: Währungsersetzung für MetaTrader
+                String mtCurrencyPair = replaceCurrencyForMetaTrader(currencyPair);
+                
+                // Format: Währungspaar;Signal;Prozent (gerundet auf ganze Zahl)
+                String line = String.format("%s;%s;%d",
+                    mtCurrencyPair,
+                    signal.getSignal().name(),
+                    Math.round(signal.getBuyPercentage())
+                );
+                
+                writer.write(line);
+                writer.newLine();
+            }
+            
+            writer.flush();
+        }
+        
+        LOGGER.fine("MetaTrader-Sync-Datei erstellt: " + mtSyncFilePath.toAbsolutePath() + 
+                   " (" + lastSentSignals.size() + " Einträge)");
+    }
+    
+    /**
+     * NEU: Ersetzt spezielle Währungspaare für MetaTrader
+     * XAUUSD → GOLD
+     * XAGUSD → SILBER
+     * 
+     * @param currencyPair Original-Währungspaar
+     * @return Ersetztes Währungspaar für MetaTrader
+     */
+    private String replaceCurrencyForMetaTrader(String currencyPair) {
+        if (currencyPair == null) {
+            return currencyPair;
+        }
+        
+        // Ersetze XAUUSD mit GOLD
+        if (currencyPair.equalsIgnoreCase("XAUUSD") || currencyPair.equalsIgnoreCase("XAU/USD")) {
+            return "GOLD";
+        }
+        
+        // Ersetze XAGUSD mit SILBER
+        if (currencyPair.equalsIgnoreCase("XAGUSD") || currencyPair.equalsIgnoreCase("XAG/USD")) {
+            return "SILBER";
+        }
+        
+        return currencyPair;
+    }
+    
+    /**
+     * NEU: Kopiert die MetaTrader-Sync-Datei in ein Zielverzeichnis
+     * 
+     * @param targetDirectory Das Zielverzeichnis
+     * @param dirLabel Label für Logging (z.B. "Verzeichnis 1")
+     * @return true wenn erfolgreich kopiert, false bei Fehler
+     */
+    private boolean copyToMetaTraderDirectory(String targetDirectory, String dirLabel) {
+        try {
+            Path targetDir = Paths.get(targetDirectory);
+            
+            // Prüfe ob Verzeichnis existiert
+            if (!Files.exists(targetDir)) {
+                LOGGER.warning("MetaTrader " + dirLabel + " existiert nicht: " + targetDirectory);
                 return false;
             }
             
-            // Wenn Signal gewechselt hat, prüfe Threshold
-            double percentageDifference = Math.abs(newBuyPercentage - lastSent.getBuyPercentage());
-            
-            if (percentageDifference >= thresholdPercent) {
-                LOGGER.info(String.format("Threshold erreicht für %s: %.1f%% Differenz (>= %.1f%%) - %s → %s", 
-                    currencyPair, percentageDifference, thresholdPercent,
-                    lastSent.getSignal().getDescription(), newSignal.getDescription()));
-                return true;
-            } else {
-                LOGGER.fine(String.format("Threshold NICHT erreicht für %s: %.1f%% Differenz (< %.1f%%) - keine E-Mail", 
-                    currencyPair, percentageDifference, thresholdPercent));
+            if (!Files.isDirectory(targetDir)) {
+                LOGGER.warning("MetaTrader " + dirLabel + " ist kein Verzeichnis: " + targetDirectory);
                 return false;
+            }
+            
+            // Kopiere Datei
+            Path targetFile = targetDir.resolve(MT_SYNC_FILE);
+            Files.copy(mtSyncFilePath, targetFile, StandardCopyOption.REPLACE_EXISTING);
+            
+            LOGGER.info("MetaTrader-Sync-Datei kopiert nach " + dirLabel + ": " + targetFile.toAbsolutePath());
+            return true;
+            
+        } catch (IOException e) {
+            LOGGER.log(Level.WARNING, "Fehler beim Kopieren zu MetaTrader " + dirLabel + ": " + e.getMessage(), e);
+            return false;
+        }
+    }
+    
+    /**
+     * Gibt Statistiken über gesendete Signale zurück
+     */
+    public String getStatistics() {
+        managerLock.lock();
+        try {
+            StringBuilder stats = new StringBuilder();
+            stats.append("LastSent-Signal-Statistiken:\n");
+            stats.append("============================\n");
+            stats.append("Gespeicherte Währungspaare: ").append(lastSentSignals.size()).append("\n");
+            
+            if (!lastSentSignals.isEmpty()) {
+                stats.append("\nLetzte gesendete Signale:\n");
+                for (Map.Entry<String, LastSentSignal> entry : lastSentSignals.entrySet()) {
+                    LastSentSignal signal = entry.getValue();
+                    stats.append(String.format("  %s: %s (%.1f%%) - %s\n",
+                        signal.getCurrencyPair(),
+                        signal.getSignal().getDescription(),
+                        signal.getBuyPercentage(),
+                        signal.getSentTime().format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm"))
+                    ));
+                }
+            }
+            
+            // NEU: MetaTrader-Sync-Status
+            if (emailConfig != null && emailConfig.isMetatraderSyncEnabled()) {
+                stats.append("\nMetaTrader-Synchronisation: AKTIVIERT\n");
+                stats.append("Konfigurierte Verzeichnisse: ").append(emailConfig.getMetatraderDirectoryCount()).append("\n");
+                if (emailConfig.hasMetatraderDirectory()) {
+                    stats.append("  Dir 1: ").append(emailConfig.getMetatraderDirectory()).append("\n");
+                }
+                if (emailConfig.hasMetatraderDirectory2()) {
+                    stats.append("  Dir 2: ").append(emailConfig.getMetatraderDirectory2()).append("\n");
+                }
+                stats.append("Sync-Datei: ").append(MT_SYNC_FILE).append("\n");
+                stats.append("Format: Währungspaar;Letztes_Signal;Prozent\n");
+                stats.append("Ersetzungen: XAUUSD→GOLD, XAGUSD→SILBER\n");
+            } else {
+                stats.append("\nMetaTrader-Synchronisation: DEAKTIVIERT\n");
+            }
+            
+            return stats.toString();
+            
+        } finally {
+            managerLock.unlock();
+        }
+    }
+    
+    /**
+     * Gibt das zuletzt gesendete Signal für ein Währungspaar zurück
+     */
+    public LastSentSignal getLastSentSignal(String currencyPair) {
+        return lastSentSignals.get(currencyPair);
+    }
+    
+    /**
+     * Prüft ob für ein Währungspaar bereits ein Signal gesendet wurde
+     */
+    public boolean hasLastSentSignal(String currencyPair) {
+        return lastSentSignals.containsKey(currencyPair);
+    }
+    
+    /**
+     * Gibt die Anzahl gespeicherter Signale zurück
+     */
+    public int getSignalCount() {
+        return lastSentSignals.size();
+    }
+    
+    /**
+     * Löscht das zuletzt gesendete Signal für ein Währungspaar
+     */
+    public void clearLastSentSignal(String currencyPair) {
+        managerLock.lock();
+        try {
+            if (lastSentSignals.remove(currencyPair) != null) {
+                LOGGER.info("Letztes gesendetes Signal gelöscht für: " + currencyPair);
+                saveLastSentSignals();
+                
+                // NEU: Synchronisiere nach Löschung
+                syncToMetaTraderDirectories();
             }
             
         } finally {
@@ -206,116 +492,54 @@ public class LastSentSignalManager {
     }
     
     /**
-     * Registriert ein gesendetes Signal (nach erfolgreichem E-Mail-Versand)
-     * @param currencyPair Das Währungspaar
-     * @param signal Das gesendete Signal
-     * @param buyPercentage Die Buy-Percentage zum Zeitpunkt des Sendens
-     */
-    public void recordSentSignal(String currencyPair, 
-            CurrencyPairData.TradingSignal signal, 
-            double buyPercentage) {
-LOGGER.info("=== DEBUG: recordSentSignal gestartet ===");
-LOGGER.info("DEBUG: Parameter - currencyPair: " + currencyPair);
-LOGGER.info("DEBUG: Parameter - signal: " + signal);
-LOGGER.info("DEBUG: Parameter - buyPercentage: " + buyPercentage);
-
-managerLock.lock();
-try {
-LOGGER.info("DEBUG: Lock erhalten, erstelle LastSentSignal...");
-LocalDateTime now = LocalDateTime.now();
-LastSentSignal lastSent = new LastSentSignal(currencyPair, signal, buyPercentage, now);
-
-LOGGER.info("DEBUG: LastSentSignal erstellt: " + lastSent.toString());
-LOGGER.info("DEBUG: Cache-Größe vor Speicherung: " + lastSentSignals.size());
-
-lastSentSignals.put(currencyPair, lastSent);
-
-LOGGER.info("DEBUG: Signal in Cache gespeichert");
-LOGGER.info("DEBUG: Cache-Größe nach Speicherung: " + lastSentSignals.size());
-LOGGER.info("DEBUG: Cache-Inhalt:");
-for (Map.Entry<String, LastSentSignal> entry : lastSentSignals.entrySet()) {
-LOGGER.info("DEBUG:   " + entry.getKey() + " -> " + entry.getValue().toString());
-}
-
-// Speichere sofort
-LOGGER.info("DEBUG: Rufe saveLastSentSignals() auf...");
-saveLastSentSignals();
-LOGGER.info("DEBUG: saveLastSentSignals() abgeschlossen");
-
-LOGGER.info(String.format("DEBUG: Gesendetes Signal registriert: %s %s bei %.1f%% um %s", 
-currencyPair, signal.getDescription(), buyPercentage, now.format(DateTimeFormatter.ofPattern("HH:mm:ss"))));
-
-} catch (Exception e) {
-LOGGER.log(Level.SEVERE, "DEBUG: FEHLER in recordSentSignal: " + e.getMessage(), e);
-throw e; // Re-throw um den Fehler nicht zu verstecken
-} finally {
-managerLock.unlock();
-LOGGER.info("=== DEBUG: recordSentSignal beendet ===");
-}
-}
-    
-    /**
-     * Holt das zuletzt gesendete Signal für ein Währungspaar
-     * @param currencyPair Das Währungspaar
-     * @return LastSentSignal oder null wenn noch nichts gesendet wurde
-     */
-    public LastSentSignal getLastSentSignal(String currencyPair) {
-        return lastSentSignals.get(currencyPair);
-    }
-    
-    /**
-     * Gibt Statistiken über gesendete E-Mails zurück
-     */
-    public String getStatistics() {
-        StringBuilder stats = new StringBuilder();
-        stats.append("LastSent Signal-Statistiken:\n");
-        stats.append("============================\n");
-        stats.append("Überwachte Währungspaare: ").append(lastSentSignals.size()).append("\n\n");
-        
-        if (!lastSentSignals.isEmpty()) {
-            stats.append("Letzte gesendete Signale:\n");
-            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
-            
-            lastSentSignals.entrySet().stream()
-                .sorted((a, b) -> b.getValue().getSentTime().compareTo(a.getValue().getSentTime()))
-                .forEach(entry -> {
-                    LastSentSignal signal = entry.getValue();
-                    stats.append(String.format("  %s: %s (%.1f%%) - %s\n",
-                        entry.getKey(),
-                        signal.getSignal().getDescription(),
-                        signal.getBuyPercentage(),
-                        signal.getSentTime().format(formatter)));
-                });
-        }
-        
-        return stats.toString();
-    }
-    
-    /**
-     * Bereinigt alte LastSent-Einträge (optional für Wartung)
-     * @param daysToKeep Anzahl Tage die behalten werden sollen
+     * NEU: Bereinigt alte Einträge aus lastSentSignals die älter als X Tage sind
+     * @param daysToKeep Anzahl der Tage, die Einträge behalten werden sollen
      */
     public void cleanupOldEntries(int daysToKeep) {
+        if (daysToKeep <= 0) {
+            LOGGER.warning("cleanupOldEntries: Ungültiger daysToKeep-Wert: " + daysToKeep + " - überspringe Bereinigung");
+            return;
+        }
+        
         managerLock.lock();
         try {
             LocalDateTime cutoffDate = LocalDateTime.now().minusDays(daysToKeep);
-            
             int removedCount = 0;
-            var iterator = lastSentSignals.entrySet().iterator();
+            int totalCount = lastSentSignals.size();
             
-            while (iterator.hasNext()) {
-                var entry = iterator.next();
-                if (entry.getValue().getSentTime().isBefore(cutoffDate)) {
-                    iterator.remove();
+            LOGGER.info("Starte Bereinigung alter LastSent-Einträge (älter als " + daysToKeep + " Tage)");
+            LOGGER.fine("Cutoff-Datum: " + cutoffDate.format(DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm:ss")));
+            
+            // Entferne alle Einträge die älter als cutoffDate sind
+            List<String> keysToRemove = lastSentSignals.entrySet().stream()
+                .filter(entry -> entry.getValue().getSentTime().isBefore(cutoffDate))
+                .map(Map.Entry::getKey)
+                .collect(Collectors.toList());
+            
+            for (String key : keysToRemove) {
+                LastSentSignal removed = lastSentSignals.remove(key);
+                if (removed != null) {
                     removedCount++;
+                    LOGGER.fine("Entfernt: " + removed.toString());
                 }
             }
             
             if (removedCount > 0) {
+                LOGGER.info("Bereinigung abgeschlossen: " + removedCount + " von " + totalCount + 
+                           " Einträgen entfernt (verbleibend: " + lastSentSignals.size() + ")");
+                
+                // Speichere bereinigte Daten
                 saveLastSentSignals();
-                LOGGER.info("LastSent-Bereinigung abgeschlossen: " + removedCount + " alte Einträge entfernt");
+                
+                // Synchronisiere nach Bereinigung
+                syncToMetaTraderDirectories();
+            } else {
+                LOGGER.info("Bereinigung abgeschlossen: Keine alten Einträge gefunden (alle " + 
+                           totalCount + " Einträge sind aktuell)");
             }
             
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Fehler beim Bereinigen alter LastSent-Einträge: " + e.getMessage(), e);
         } finally {
             managerLock.unlock();
         }
@@ -330,6 +554,9 @@ LOGGER.info("=== DEBUG: recordSentSignal beendet ===");
         try {
             // Speichere letzte Zustände
             saveLastSentSignals();
+            
+            // NEU: Finale MetaTrader-Sync
+            syncToMetaTraderDirectories();
             
             // Cache leeren
             lastSentSignals.clear();

@@ -11,6 +11,7 @@ import com.fxssi.extractor.model.CurrencyPairData;
 import com.fxssi.extractor.model.SignalChangeEvent;
 import com.fxssi.extractor.notification.EmailConfig;
 import com.fxssi.extractor.notification.EmailService;
+import com.fxsssi.extractor.gui.config.EmailConfigWindow;
 
 import javafx.application.Platform;
 import javafx.collections.FXCollections;

@@ -12,10 +12,10 @@ import java.util.logging.Level;
 /**
  * Konfigurationsklasse für E-Mail-Einstellungen
  * Speichert und lädt GMX-Server-Konfiguration und E-Mail-Präferenzen
- * ERWEITERT um MetaTrader-Synchronisation-Support
+ * ERWEITERT um MetaTrader-Synchronisation-Support mit Dual-Directory
  * 
  * @author Generated for FXSSI Email Notifications
- * @version 1.2 - MetaTrader-Synchronisation Support
+ * @version 1.3 - Dual MetaTrader-Directory Support
  */
 public class EmailConfig {
     
@@ -32,6 +32,7 @@ public class EmailConfig {
     // NEU: MetaTrader Standard-Einstellungen
     private static final boolean DEFAULT_METATRADER_SYNC_ENABLED = false;
     private static final String DEFAULT_METATRADER_DIRECTORY = "";
+    private static final String DEFAULT_METATRADER_DIRECTORY2 = "";
     
     // Konfigurationsfelder
     private String smtpHost;
@@ -50,9 +51,10 @@ public class EmailConfig {
     private int maxEmailsPerHour;
     private double signalChangeThreshold; // Threshold für Signalwechsel
     
-    // NEU: MetaTrader-Synchronisation Felder
+    // NEU: MetaTrader-Synchronisation Felder (Dual-Directory)
     private boolean metatraderSyncEnabled;
     private String metatraderDirectory;
+    private String metatraderDirectory2; // NEUES FELD für zweites Verzeichnis
     
     private final String dataDirectory;
     private final Path configPath;
@@ -98,9 +100,10 @@ public class EmailConfig {
         this.maxEmailsPerHour = 10;
         this.signalChangeThreshold = DEFAULT_SIGNAL_THRESHOLD;
         
-        // NEU: MetaTrader Standard-Werte
+        // NEU: MetaTrader Standard-Werte (Dual-Directory)
         this.metatraderSyncEnabled = DEFAULT_METATRADER_SYNC_ENABLED;
         this.metatraderDirectory = DEFAULT_METATRADER_DIRECTORY;
+        this.metatraderDirectory2 = DEFAULT_METATRADER_DIRECTORY2;
     }
     
     /**
@@ -120,7 +123,7 @@ public class EmailConfig {
     
     /**
      * Lädt die E-Mail-Konfiguration aus der Datei
-     * ERWEITERT um MetaTrader-Synchronisation
+     * ERWEITERT um MetaTrader-Synchronisation mit Dual-Directory
      */
     public void loadConfig() {
         createConfigDirectory();
@@ -153,11 +156,13 @@ public class EmailConfig {
             maxEmailsPerHour = Integer.parseInt(props.getProperty("limit.max.per.hour", "10"));
             signalChangeThreshold = Double.parseDouble(props.getProperty("signal.threshold.percent", String.valueOf(DEFAULT_SIGNAL_THRESHOLD)));
             
-            // NEU: Lade MetaTrader-Konfiguration
+            // NEU: Lade MetaTrader-Konfiguration (Dual-Directory)
             metatraderSyncEnabled = Boolean.parseBoolean(props.getProperty("metatrader.sync.enabled", String.valueOf(DEFAULT_METATRADER_SYNC_ENABLED)));
             metatraderDirectory = props.getProperty("metatrader.directory", DEFAULT_METATRADER_DIRECTORY);
+            metatraderDirectory2 = props.getProperty("metatrader.directory2", DEFAULT_METATRADER_DIRECTORY2); // NEUES FELD
             
-            LOGGER.info("E-Mail-Konfiguration erfolgreich geladen (Threshold: " + signalChangeThreshold + "%, MetaTrader-Sync: " + metatraderSyncEnabled + ")");
+            LOGGER.info("E-Mail-Konfiguration erfolgreich geladen (Threshold: " + signalChangeThreshold + "%, MetaTrader-Sync: " + metatraderSyncEnabled + 
+                       ", Directories: " + (hasMetatraderDirectory() ? "1" : "0") + (hasMetatraderDirectory2() ? "+1" : "") + ")");
             
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Fehler beim Laden der E-Mail-Konfiguration: " + e.getMessage(), e);
@@ -166,8 +171,8 @@ public class EmailConfig {
     }
     
     /**
-     * Speichert die E-Mail-Konfiguration in die Datei
-     * ERWEITERT um MetaTrader-Synchronisation
+     * Speichert die E-Mail-Konfiguration in eine Datei
+     * ERWEITERT um MetaTrader-Synchronisation mit Dual-Directory
      */
     public void saveConfig() {
         createConfigDirectory();
@@ -175,7 +180,7 @@ public class EmailConfig {
         
         Properties props = new Properties();
         
-        // Setze Konfigurationswerte
+        // Speichere Konfigurationswerte
         props.setProperty("smtp.host", smtpHost);
         props.setProperty("smtp.port", String.valueOf(smtpPort));
         props.setProperty("smtp.starttls", String.valueOf(useStartTLS));
@@ -192,14 +197,14 @@ public class EmailConfig {
         props.setProperty("limit.max.per.hour", String.valueOf(maxEmailsPerHour));
         props.setProperty("signal.threshold.percent", String.valueOf(signalChangeThreshold));
         
-        // NEU: Speichere MetaTrader-Konfiguration
+        // NEU: Speichere MetaTrader-Konfiguration (Dual-Directory)
         props.setProperty("metatrader.sync.enabled", String.valueOf(metatraderSyncEnabled));
-        props.setProperty("metatrader.directory", metatraderDirectory);
+        props.setProperty("metatrader.directory", metatraderDirectory != null ? metatraderDirectory : "");
+        props.setProperty("metatrader.directory2", metatraderDirectory2 != null ? metatraderDirectory2 : ""); // NEUES FELD
         
         try (OutputStream os = Files.newOutputStream(configFile)) {
-            props.store(os, "FXSSI E-Mail Konfiguration - GMX Server Setup + MetaTrader Sync");
-            LOGGER.info("E-Mail-Konfiguration erfolgreich gespeichert (inkl. MetaTrader-Sync: " + metatraderSyncEnabled + ")");
-            
+            props.store(os, "FXSSI E-Mail-Konfiguration (mit Dual MetaTrader-Directory Support)");
+            LOGGER.info("E-Mail-Konfiguration gespeichert in: " + configFile.toAbsolutePath());
         } catch (IOException e) {
             LOGGER.log(Level.SEVERE, "Fehler beim Speichern der E-Mail-Konfiguration: " + e.getMessage(), e);
             throw new RuntimeException("Konnte E-Mail-Konfiguration nicht speichern", e);
@@ -207,261 +212,186 @@ public class EmailConfig {
     }
     
     /**
-     * Erstellt Java Mail Properties basierend auf der Konfiguration
-     */
-    public Properties createMailProperties() {
-        Properties mailProps = new Properties();
-        
-        mailProps.setProperty("mail.smtp.host", smtpHost);
-        mailProps.setProperty("mail.smtp.port", String.valueOf(smtpPort));
-        mailProps.setProperty("mail.smtp.auth", "true");
-        
-        if (useStartTLS) {
-            mailProps.setProperty("mail.smtp.starttls.enable", "true");
-            mailProps.setProperty("mail.smtp.starttls.required", "true");
-        }
-        
-        if (useSSL) {
-            mailProps.setProperty("mail.smtp.ssl.enable", "true");
-            mailProps.setProperty("mail.smtp.socketFactory.port", String.valueOf(smtpPort));
-            mailProps.setProperty("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
-            mailProps.setProperty("mail.smtp.socketFactory.fallback", "false");
-        }
-        
-        // Debug-Modus für Troubleshooting
-        mailProps.setProperty("mail.debug", "false");
-        mailProps.setProperty("mail.smtp.timeout", "10000");
-        mailProps.setProperty("mail.smtp.connectiontimeout", "10000");
-        
-        return mailProps;
-    }
-    
-    /**
-     * Validiert die aktuelle Konfiguration
-     * ERWEITERT um MetaTrader-Validierung
+     * Validiert die Konfiguration
+     * ERWEITERT um MetaTrader-Directory-Validierung
      */
     public ValidationResult validateConfig() {
-        StringBuilder errors = new StringBuilder();
-        boolean isValid = true;
-        
-        // SMTP-Host prüfen
-        if (smtpHost == null || smtpHost.trim().isEmpty()) {
-            errors.append("- SMTP-Host ist erforderlich\n");
-            isValid = false;
+        if (!emailEnabled) {
+            return new ValidationResult(true, ""); // Keine Validierung wenn deaktiviert
         }
         
-        // Port prüfen
-        if (smtpPort <= 0 || smtpPort > 65535) {
-            errors.append("- SMTP-Port muss zwischen 1 und 65535 liegen\n");
-            isValid = false;
-        }
-        
-        // Benutzername prüfen
+        // Validiere GMX-Einstellungen
         if (username == null || username.trim().isEmpty()) {
-            errors.append("- Benutzername ist erforderlich\n");
-            isValid = false;
+            return new ValidationResult(false, "Benutzername ist erforderlich");
         }
         
-        // Passwort prüfen
         if (password == null || password.trim().isEmpty()) {
-            errors.append("- Passwort ist erforderlich\n");
-            isValid = false;
+            return new ValidationResult(false, "Passwort ist erforderlich");
         }
         
-        // From-E-Mail prüfen
-        if (fromEmail == null || fromEmail.trim().isEmpty() || !isValidEmail(fromEmail)) {
-            errors.append("- Gültige Absender-E-Mail ist erforderlich\n");
-            isValid = false;
+        if (fromEmail == null || fromEmail.trim().isEmpty() || !fromEmail.contains("@")) {
+            return new ValidationResult(false, "Gültige Absender-E-Mail ist erforderlich");
         }
         
-        // To-E-Mail prüfen
-        if (toEmail == null || toEmail.trim().isEmpty() || !isValidEmail(toEmail)) {
-            errors.append("- Gültige Empfänger-E-Mail ist erforderlich\n");
-            isValid = false;
+        if (toEmail == null || toEmail.trim().isEmpty() || !toEmail.contains("@")) {
+            return new ValidationResult(false, "Gültige Empfänger-E-Mail ist erforderlich");
         }
         
-        // Limit prüfen
-        if (maxEmailsPerHour <= 0 || maxEmailsPerHour > 100) {
-            errors.append("- E-Mail-Limit pro Stunde muss zwischen 1 und 100 liegen\n");
-            isValid = false;
+        if (maxEmailsPerHour < 1 || maxEmailsPerHour > 100) {
+            return new ValidationResult(false, "E-Mail-Limit muss zwischen 1 und 100 liegen");
         }
         
-        // Threshold prüfen
         if (signalChangeThreshold < 0.1 || signalChangeThreshold > 50.0) {
-            errors.append("- Signal-Threshold muss zwischen 0,1% und 50% liegen\n");
-            isValid = false;
+            return new ValidationResult(false, "Signal-Threshold muss zwischen 0.1% und 50% liegen");
         }
         
-        // NEU: MetaTrader-Validierung
+        // NEU: Validiere MetaTrader-Verzeichnisse
         if (metatraderSyncEnabled) {
-            if (metatraderDirectory == null || metatraderDirectory.trim().isEmpty()) {
-                errors.append("- MetaTrader-Verzeichnis ist erforderlich wenn Synchronisation aktiviert\n");
-                isValid = false;
-            } else {
-                // Prüfe ob Verzeichnis existiert und beschreibbar ist
-                File dir = new File(metatraderDirectory.trim());
-                if (!dir.exists()) {
-                    errors.append("- MetaTrader-Verzeichnis existiert nicht: ").append(metatraderDirectory).append("\n");
-                    isValid = false;
-                } else if (!dir.isDirectory()) {
-                    errors.append("- MetaTrader-Pfad ist kein Verzeichnis: ").append(metatraderDirectory).append("\n");
-                    isValid = false;
-                } else if (!dir.canWrite()) {
-                    errors.append("- MetaTrader-Verzeichnis ist nicht beschreibbar: ").append(metatraderDirectory).append("\n");
-                    isValid = false;
+            if (!hasMetatraderDirectory() && !hasMetatraderDirectory2()) {
+                return new ValidationResult(false, "MetaTrader-Synchronisation aktiviert, aber kein Verzeichnis konfiguriert");
+            }
+            
+            // Prüfe ob Verzeichnisse existieren
+            if (hasMetatraderDirectory()) {
+                Path dir1 = Paths.get(metatraderDirectory);
+                if (!Files.exists(dir1)) {
+                    return new ValidationResult(false, "MetaTrader-Verzeichnis 1 existiert nicht: " + metatraderDirectory);
+                }
+                if (!Files.isDirectory(dir1)) {
+                    return new ValidationResult(false, "MetaTrader-Pfad 1 ist kein Verzeichnis: " + metatraderDirectory);
+                }
+            }
+            
+            if (hasMetatraderDirectory2()) {
+                Path dir2 = Paths.get(metatraderDirectory2);
+                if (!Files.exists(dir2)) {
+                    return new ValidationResult(false, "MetaTrader-Verzeichnis 2 existiert nicht: " + metatraderDirectory2);
+                }
+                if (!Files.isDirectory(dir2)) {
+                    return new ValidationResult(false, "MetaTrader-Pfad 2 ist kein Verzeichnis: " + metatraderDirectory2);
                 }
             }
         }
         
-        return new ValidationResult(isValid, errors.toString());
+        return new ValidationResult(true, "Konfiguration ist gültig");
     }
     
     /**
-     * Prüft ob die E-Mail-Adresse gültig ist (vereinfacht)
+     * Erstellt Properties-Objekt für JavaMail
      */
-    private boolean isValidEmail(String email) {
-        return email != null && email.contains("@") && email.contains(".") && email.length() > 5;
+    public Properties createMailProperties() {
+        Properties props = new Properties();
+        
+        // SMTP-Server-Konfiguration
+        props.put("mail.smtp.host", smtpHost);
+        props.put("mail.smtp.port", String.valueOf(smtpPort));
+        props.put("mail.smtp.auth", "true");
+        
+        // TLS/SSL-Konfiguration
+        if (useStartTLS) {
+            props.put("mail.smtp.starttls.enable", "true");
+            props.put("mail.smtp.starttls.required", "true");
+        }
+        
+        if (useSSL) {
+            props.put("mail.smtp.ssl.enable", "true");
+            props.put("mail.smtp.socketFactory.port", String.valueOf(smtpPort));
+            props.put("mail.smtp.socketFactory.class", "javax.net.ssl.SSLSocketFactory");
+        }
+        
+        // Timeouts
+        props.put("mail.smtp.timeout", "10000");
+        props.put("mail.smtp.connectiontimeout", "10000");
+        
+        return props;
     }
     
     /**
-     * Einfache Passwort-Kodierung (Base64)
+     * Kodiert das Passwort für die Speicherung (einfache Base64-Kodierung)
      */
     private String encodePassword(String password) {
         if (password == null || password.isEmpty()) {
             return "";
         }
-        return java.util.Base64.getEncoder().encodeToString(password.getBytes(StandardCharsets.UTF_8));
+        try {
+            return java.util.Base64.getEncoder().encodeToString(password.getBytes(StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Fehler beim Kodieren des Passworts", e);
+            return password;
+        }
     }
     
     /**
-     * Einfache Passwort-Dekodierung (Base64)
+     * Dekodiert das Passwort beim Laden
      */
     private String decodePassword(String encodedPassword) {
         if (encodedPassword == null || encodedPassword.isEmpty()) {
             return "";
         }
         try {
-            return new String(java.util.Base64.getDecoder().decode(encodedPassword), StandardCharsets.UTF_8);
+            byte[] decodedBytes = java.util.Base64.getDecoder().decode(encodedPassword);
+            return new String(decodedBytes, StandardCharsets.UTF_8);
         } catch (Exception e) {
-            LOGGER.warning("Fehler beim Dekodieren des Passworts: " + e.getMessage());
-            return "";
+            LOGGER.log(Level.WARNING, "Fehler beim Dekodieren des Passworts - verwende Originalwert", e);
+            return encodedPassword;
         }
     }
     
     /**
-     * Erstellt Standard-GMX-Konfiguration
+     * NEU: Prüft ob das erste MetaTrader-Verzeichnis gesetzt ist
      */
-    public void setGmxDefaults() {
-        this.smtpHost = "mail.gmx.net";
-        this.smtpPort = 587;
-        this.useStartTLS = true;
-        this.useSSL = false;
-        LOGGER.info("GMX Standard-Konfiguration gesetzt");
+    public boolean hasMetatraderDirectory() {
+        return metatraderDirectory != null && !metatraderDirectory.trim().isEmpty();
     }
     
     /**
-     * NEU: Setzt Standard-MetaTrader-Verzeichnis basierend auf dem Betriebssystem
+     * NEU: Prüft ob das zweite MetaTrader-Verzeichnis gesetzt ist
      */
-    public void setMetaTraderDefaults() {
-        String userHome = System.getProperty("user.home");
-        String defaultPath = userHome + "\\AppData\\Roaming\\MetaQuotes\\Terminal";
-        
-        File mtPath = new File(defaultPath);
-        if (mtPath.exists()) {
-            // Suche nach Terminal-Verzeichnissen
-            File[] terminals = mtPath.listFiles(File::isDirectory);
-            if (terminals != null && terminals.length > 0) {
-                // Nimm das erste Terminal-Verzeichnis und füge MQL5/Files hinzu
-                File mql5Files = new File(terminals[0], "MQL5\\Files");
-                if (mql5Files.exists()) {
-                    this.metatraderDirectory = mql5Files.getAbsolutePath();
-                    LOGGER.info("MetaTrader Standard-Verzeichnis gesetzt: " + this.metatraderDirectory);
-                    return;
-                }
-            }
-        }
-        
-        // Fallback: Standard-Pfad ohne Existenz-Prüfung
-        this.metatraderDirectory = defaultPath + "\\[TERMINAL_ID]\\MQL5\\Files";
-        LOGGER.info("MetaTrader Standard-Pfad gesetzt (Template): " + this.metatraderDirectory);
+    public boolean hasMetatraderDirectory2() {
+        return metatraderDirectory2 != null && !metatraderDirectory2.trim().isEmpty();
     }
     
     /**
-     * NEU: Prüft ob MetaTrader-Synchronisation verfügbar ist
+     * NEU: Gibt die Anzahl konfigurierter MetaTrader-Verzeichnisse zurück
      */
-    public boolean isMetaTraderSyncAvailable() {
-        if (!metatraderSyncEnabled || metatraderDirectory == null || metatraderDirectory.trim().isEmpty()) {
-            return false;
-        }
-        
-        File dir = new File(metatraderDirectory.trim());
-        return dir.exists() && dir.isDirectory() && dir.canWrite();
+    public int getMetatraderDirectoryCount() {
+        int count = 0;
+        if (hasMetatraderDirectory()) count++;
+        if (hasMetatraderDirectory2()) count++;
+        return count;
     }
     
     /**
-     * Gibt eine Zusammenfassung der Konfiguration zurück
-     * ERWEITERT um MetaTrader-Informationen
-     */
-    public String getConfigSummary() {
-        StringBuilder summary = new StringBuilder();
-        summary.append("E-Mail-Konfiguration:\n");
-        summary.append("====================\n");
-        summary.append("Server: ").append(smtpHost).append(":").append(smtpPort).append("\n");
-        summary.append("Verschlüsselung: ").append(useStartTLS ? "STARTTLS" : (useSSL ? "SSL" : "Keine")).append("\n");
-        summary.append("Benutzername: ").append(username).append("\n");
-        summary.append("Von: ").append(fromName).append(" <").append(fromEmail).append(">\n");
-        summary.append("An: ").append(toEmail).append("\n");
-        summary.append("Status: ").append(emailEnabled ? "Aktiviert" : "Deaktiviert").append("\n");
-        summary.append("Benachrichtigungen: ");
-        if (sendOnCriticalChanges) summary.append("Kritisch ");
-        if (sendOnHighChanges) summary.append("Hoch ");
-        if (sendOnAllChanges) summary.append("Alle ");
-        summary.append("\n");
-        summary.append("Max. E-Mails/Stunde: ").append(maxEmailsPerHour).append("\n");
-        summary.append("Signal-Threshold: ").append(signalChangeThreshold).append("%\n");
-        
-        // NEU: MetaTrader-Informationen
-        summary.append("\nMetaTrader-Synchronisation:\n");
-        summary.append("===========================\n");
-        summary.append("Status: ").append(metatraderSyncEnabled ? "Aktiviert" : "Deaktiviert").append("\n");
-        if (metatraderSyncEnabled) {
-            summary.append("Verzeichnis: ").append(metatraderDirectory).append("\n");
-            summary.append("Verfügbar: ").append(isMetaTraderSyncAvailable() ? "Ja" : "Nein").append("\n");
-            summary.append("Ziel-Datei: ").append(metatraderDirectory).append("\\last_known_signals.csv\n");
-        }
-        
-        return summary.toString();
-    }
-    
-    /**
-     * Gibt eine ausführliche Erklärung des Signal-Threshold-Mechanismus zurück
-     * Diese Erklärung soll in der GUI angezeigt werden wo der Threshold konfiguriert wird
+     * Gibt eine detaillierte Erklärung des Signal-Threshold-Systems zurück
+     * ERWEITERT um Dual-Directory-Informationen
      */
     public String getSignalThresholdExplanation() {
         StringBuilder explanation = new StringBuilder();
         
-        explanation.append("SIGNAL-THRESHOLD ANTI-SPAM-SYSTEM\n");
-        explanation.append("=================================\n\n");
+        explanation.append("SIGNAL-THRESHOLD-SYSTEM (Anti-Spam-Mechanismus)\n");
+        explanation.append("=================================================\n\n");
         
-        explanation.append("ZWECK:\n");
-        explanation.append("------\n");
-        explanation.append("Verhindert E-Mail-Spam durch Signal-Schwankungen um die 55%-Marke.\n");
-        explanation.append("Ohne Threshold: Signal wechselt zwischen 54% und 56% → ständige E-Mails\n");
-        explanation.append("Mit Threshold: E-Mail nur bei signifikanten Änderungen\n\n");
+        explanation.append("WAS IST DER SIGNAL-THRESHOLD?\n");
+        explanation.append("-----------------------------\n");
+        explanation.append("Der Signal-Threshold ist ein Prozentwert, der bestimmt, wann eine neue E-Mail\n");
+        explanation.append("für ein Währungspaar gesendet wird. Er verhindert E-Mail-Spam bei kleinen\n");
+        explanation.append("Schwankungen der Buy/Sell-Verhältnisse.\n\n");
         
         explanation.append("FUNKTIONSWEISE:\n");
         explanation.append("---------------\n");
-        explanation.append("1. ERSTE E-MAIL für ein Währungspaar:\n");
-        explanation.append("   → Wird IMMER gesendet (keine Historie vorhanden)\n");
-        explanation.append("   → Beispiel: EURUSD BUY bei 58% → E-Mail gesendet\n\n");
+        explanation.append("1. ERSTE E-MAIL: Wird IMMER gesendet (egal welcher Threshold)\n");
+        explanation.append("2. FOLGE-E-MAILS: Nur wenn die Differenz >= ").append(signalChangeThreshold).append("% ist\n\n");
         
-        explanation.append("2. GLEICHES SIGNAL:\n");
-        explanation.append("   → KEINE E-Mail (Signal unverändert)\n");
-        explanation.append("   → Beispiel: EURUSD BUY 58% → BUY 59% → keine E-Mail\n\n");
+        explanation.append("Die Differenz wird wie folgt berechnet:\n");
+        explanation.append("• Differenz = |Neuer Buy_Prozent - Letzter gesendeter Buy_Prozent|\n");
+        explanation.append("• Wenn Differenz >= ").append(signalChangeThreshold).append("% → E-Mail wird gesendet\n");
+        explanation.append("• Wenn Differenz < ").append(signalChangeThreshold).append("% → E-Mail wird NICHT gesendet\n\n");
         
-        explanation.append("3. NEUES SIGNAL:\n");
-        explanation.append("   → E-Mail NUR wenn Threshold überschritten\n");
-        explanation.append("   → Berechnung: |aktuelle_% - letzte_versendete_%| >= Threshold\n\n");
+        explanation.append("WICHTIG:\n");
+        explanation.append("--------\n");
+        explanation.append("• Der Threshold gilt NUR für dasselbe Währungspaar\n");
+        explanation.append("• Jedes Währungspaar hat seinen eigenen \"letzten gesendeten\" Status\n");
+        explanation.append("• Ein Signalwechsel (BUY→SELL) triggert immer eine E-Mail wenn Threshold erreicht\n\n");
         
         explanation.append("BERECHNUNGSBEISPIELE (Threshold: ").append(signalChangeThreshold).append("%):\n");
         explanation.append("-------------------------\n");
@@ -481,19 +411,37 @@ public class EmailConfig {
         explanation.append("GBPUSD;SELL;42,10;2025-09-10 14:15:22\n");
         explanation.append("USDJPY;NEUTRAL;51,80;2025-09-10 13:44:11\n\n");
         
-        explanation.append("METATRADER-SYNCHRONISATION:\n");
-        explanation.append("---------------------------\n");
+        explanation.append("METATRADER-SYNCHRONISATION (DUAL-DIRECTORY):\n");
+        explanation.append("--------------------------------------------\n");
         if (metatraderSyncEnabled) {
-            explanation.append("Status: Aktiviert\n");
-            explanation.append("Ziel-Verzeichnis: ").append(metatraderDirectory).append("\n");
-            explanation.append("Synchronisierte Datei: last_known_signals.csv\n");
+            explanation.append("Status: ✅ Aktiviert\n");
+            int dirCount = getMetatraderDirectoryCount();
+            explanation.append("Konfigurierte Verzeichnisse: ").append(dirCount).append("\n\n");
+            
+            if (hasMetatraderDirectory()) {
+                explanation.append("📂 Verzeichnis 1: ").append(metatraderDirectory).append("\n");
+            }
+            if (hasMetatraderDirectory2()) {
+                explanation.append("📂 Verzeichnis 2: ").append(metatraderDirectory2).append("\n");
+            }
+            
+            explanation.append("\nSynchronisierte Datei: last_known_signals.csv\n");
+            explanation.append("Format: Währungspaar;Letztes_Signal;Prozent\n");
+            explanation.append("Beispiel:\n");
+            explanation.append("  NZD/USD;SELL;55\n");
+            explanation.append("  AUD/JPY;BUY;60\n");
+            explanation.append("  GOLD;BUY;65      (XAUUSD → GOLD)\n");
+            explanation.append("  SILBER;SELL;45   (XAGUSD → SILBER)\n\n");
+            
             explanation.append("• Datei wird bei jedem Signalwechsel automatisch aktualisiert\n");
+            explanation.append("• Wird in ").append(dirCount).append(" Verzeichnis").append(dirCount > 1 ? "se" : "").append(" kopiert\n");
             explanation.append("• Ermöglicht MetaTrader Expert Advisors Zugriff auf aktuelle Signale\n");
-            explanation.append("• Format: Währungspaar;Signal;Buy_Prozent;Zeitstempel\n\n");
+            explanation.append("• Währungsersetzung: XAUUSD→GOLD, XAGUSD→SILBER\n\n");
         } else {
-            explanation.append("Status: Deaktiviert\n");
+            explanation.append("Status: ❌ Deaktiviert\n");
             explanation.append("• Aktivieren Sie die Synchronisation für MetaTrader EA-Integration\n");
-            explanation.append("• Datei wird dann automatisch in MT5/Files-Verzeichnis kopiert\n\n");
+            explanation.append("• Datei wird dann automatisch in MT5/Files-Verzeichnisse kopiert\n");
+            explanation.append("• Unterstützt 1 oder 2 Ziel-Verzeichnisse\n\n");
         }
         
         explanation.append("DATEI-DETAILS:\n");
@@ -511,14 +459,14 @@ public class EmailConfig {
         
         explanation.append("AKTUELL KONFIGURIERT: ").append(signalChangeThreshold).append("%\n");
         explanation.append("E-MAIL-STATUS: ").append(emailEnabled ? "E-Mails aktiviert" : "E-Mails deaktiviert").append("\n");
-        explanation.append("METATRADER-STATUS: ").append(metatraderSyncEnabled ? "Synchronisation aktiviert" : "Synchronisation deaktiviert");
+        explanation.append("METATRADER-STATUS: ").append(metatraderSyncEnabled ? "Synchronisation aktiviert (" + getMetatraderDirectoryCount() + " Verzeichnis" + (getMetatraderDirectoryCount() > 1 ? "se" : "") + ")" : "Synchronisation deaktiviert");
         
         return explanation.toString();
     }
     
     /**
      * Gibt eine kurze Tooltip-Erklärung für die GUI zurück
-     * ERWEITERT um MetaTrader-Informationen
+     * ERWEITERT um Dual-Directory-Informationen
      */
     public String getSignalThresholdTooltip() {
         StringBuilder tooltip = new StringBuilder();
@@ -540,15 +488,27 @@ public class EmailConfig {
             dataDirectory
         ));
         
-        // NEU: MetaTrader-Information im Tooltip
+        // NEU: MetaTrader-Information im Tooltip (Dual-Directory)
         if (metatraderSyncEnabled) {
-            tooltip.append("\nMetaTrader-Synchronisation: AKTIVIERT\n");
-            tooltip.append("Ziel: ").append(metatraderDirectory).append("\\last_known_signals.csv\n");
+            int dirCount = getMetatraderDirectoryCount();
+            tooltip.append("\nMetaTrader-Synchronisation: ✅ AKTIVIERT\n");
+            tooltip.append("Konfigurierte Verzeichnisse: ").append(dirCount).append("\n");
+            
+            if (hasMetatraderDirectory()) {
+                tooltip.append("Dir 1: ").append(metatraderDirectory).append("\n");
+            }
+            if (hasMetatraderDirectory2()) {
+                tooltip.append("Dir 2: ").append(metatraderDirectory2).append("\n");
+            }
+            
+            tooltip.append("Datei: last_known_signals.csv (Währungspaar;Signal;Prozent)\n");
+            tooltip.append("Ersetzung: XAUUSD→GOLD, XAGUSD→SILBER");
         } else {
-            tooltip.append("\nMetaTrader-Synchronisation: Deaktiviert\n");
+            tooltip.append("\nMetaTrader-Synchronisation: ❌ Deaktiviert\n");
+            tooltip.append("(Kann 1 oder 2 Ziel-Verzeichnisse unterstützen)");
         }
         
-        tooltip.append("\nEmpfehlung: 3-5% für ausgewogenes Verhalten");
+        tooltip.append("\n\nEmpfehlung: 3-5% für ausgewogenes Verhalten");
         
         return tooltip.toString();
     }
@@ -600,7 +560,7 @@ public class EmailConfig {
     public double getSignalChangeThreshold() { return signalChangeThreshold; }
     public void setSignalChangeThreshold(double signalChangeThreshold) { this.signalChangeThreshold = signalChangeThreshold; }
     
-    // NEU: MetaTrader Getter/Setter
+    // NEU: MetaTrader Getter/Setter (Dual-Directory)
     public boolean isMetatraderSyncEnabled() { return metatraderSyncEnabled; }
     public void setMetatraderSyncEnabled(boolean metatraderSyncEnabled) { this.metatraderSyncEnabled = metatraderSyncEnabled; }
     
@@ -609,7 +569,84 @@ public class EmailConfig {
         this.metatraderDirectory = metatraderDirectory != null ? metatraderDirectory.trim() : "";
     }
     
+    // NEU: Getter/Setter für zweites MetaTrader-Verzeichnis
+    public String getMetatraderDirectory2() { return metatraderDirectory2; }
+    public void setMetatraderDirectory2(String metatraderDirectory2) { 
+        this.metatraderDirectory2 = metatraderDirectory2 != null ? metatraderDirectory2.trim() : "";
+    }
+    
     public String getDataDirectory() { return dataDirectory; }
+    
+    /**
+     * Gibt eine Zusammenfassung der Konfiguration zurück
+     * @return String mit Konfigurations-Übersicht
+     */
+    public String getConfigSummary() {
+        StringBuilder summary = new StringBuilder();
+        
+        // E-Mail-Status
+        summary.append("E-Mail-Benachrichtigungen: ").append(emailEnabled ? "✅ Aktiviert" : "❌ Deaktiviert").append("\n");
+        
+        if (emailEnabled) {
+            // Server-Konfiguration
+            summary.append("Server: ").append(smtpHost).append(":").append(smtpPort).append("\n");
+            summary.append("Benutzername: ").append(username.isEmpty() ? "(nicht gesetzt)" : username).append("\n");
+            summary.append("Passwort: ").append(password.isEmpty() ? "(nicht gesetzt)" : "********").append("\n");
+            summary.append("StartTLS: ").append(useStartTLS ? "Aktiviert" : "Deaktiviert").append("\n");
+            summary.append("SSL: ").append(useSSL ? "Aktiviert" : "Deaktiviert").append("\n");
+            
+            // E-Mail-Adressen
+            summary.append("Von: ").append(fromEmail.isEmpty() ? "(nicht gesetzt)" : fromEmail).append("\n");
+            summary.append("An: ").append(toEmail.isEmpty() ? "(nicht gesetzt)" : toEmail).append("\n");
+            
+            // Benachrichtigungseinstellungen
+            summary.append("Bei kritischen Änderungen: ").append(sendOnCriticalChanges ? "Ja" : "Nein").append("\n");
+            summary.append("Bei hohen Änderungen: ").append(sendOnHighChanges ? "Ja" : "Nein").append("\n");
+            summary.append("Bei allen Änderungen: ").append(sendOnAllChanges ? "Ja" : "Nein").append("\n");
+            summary.append("Max. E-Mails/Stunde: ").append(maxEmailsPerHour).append("\n");
+        }
+        
+        // Signal-Threshold
+        summary.append("Signal-Threshold: ").append(String.format("%.1f", signalChangeThreshold)).append("%\n");
+        
+        // MetaTrader-Synchronisation
+        summary.append("MetaTrader-Sync: ").append(metatraderSyncEnabled ? "✅ Aktiviert" : "❌ Deaktiviert").append("\n");
+        
+        if (metatraderSyncEnabled) {
+            int dirCount = getMetatraderDirectoryCount();
+            summary.append("MetaTrader-Verzeichnisse: ").append(dirCount).append("\n");
+            
+            if (hasMetatraderDirectory()) {
+                boolean available1 = isMetaTraderDirectoryAvailable(metatraderDirectory);
+                summary.append("  └─ Dir 1: ").append(available1 ? "✅" : "⚠️").append(" ").append(metatraderDirectory).append("\n");
+            }
+            
+            if (hasMetatraderDirectory2()) {
+                boolean available2 = isMetaTraderDirectoryAvailable(metatraderDirectory2);
+                summary.append("  └─ Dir 2: ").append(available2 ? "✅" : "⚠️").append(" ").append(metatraderDirectory2).append("\n");
+            }
+        }
+        
+        return summary.toString();
+    }
+    
+    /**
+     * Prüft ob ein MetaTrader-Verzeichnis verfügbar ist (existiert und beschreibbar)
+     * @param directory Zu prüfendes Verzeichnis
+     * @return true wenn verfügbar, sonst false
+     */
+    private boolean isMetaTraderDirectoryAvailable(String directory) {
+        if (directory == null || directory.trim().isEmpty()) {
+            return false;
+        }
+        
+        try {
+            java.io.File dir = new java.io.File(directory);
+            return dir.exists() && dir.isDirectory() && dir.canWrite();
+        } catch (Exception e) {
+            return false;
+        }
+    }
     
     // ===== INNERE KLASSEN =====
     
