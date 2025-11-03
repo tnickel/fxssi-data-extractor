@@ -46,12 +46,28 @@ public class SignalChangeHistoryManager {
     private final ReentrantLock managerLock = new ReentrantLock();
     
     // Cache für letzte bekannte Signale pro Währungspaar
-    private final ConcurrentHashMap<String, CurrencyPairData.TradingSignal> lastKnownSignals;
+    private final ConcurrentHashMap<String, SignalWithPercentage> lastKnownSignals;
     private final ConcurrentHashMap<String, List<SignalChangeEvent>> changeHistoryCache;
     
     // EmailService für Threshold-basierte Benachrichtigungen
     private EmailService emailService;
     private boolean emailNotificationsEnabled = false;
+    
+    /**
+     * Innere Klasse für Signal mit Prozentangabe
+     */
+    public static class SignalWithPercentage {
+        private final CurrencyPairData.TradingSignal signal;
+        private final double buyPercentage;
+        
+        public SignalWithPercentage(CurrencyPairData.TradingSignal signal, double buyPercentage) {
+            this.signal = signal;
+            this.buyPercentage = buyPercentage;
+        }
+        
+        public CurrencyPairData.TradingSignal getSignal() { return signal; }
+        public double getBuyPercentage() { return buyPercentage; }
+    }
     
     // NEU: MetaTrader-Verzeichnis-Synchronisation
     private String metatraderFileDir = null;
@@ -218,10 +234,21 @@ public class SignalChangeHistoryManager {
                     }
                     
                     String[] parts = line.split(";");
-                    if (parts.length == 2) {
+                    if (parts.length >= 2) {
                         String currencyPair = parts[0];
                         CurrencyPairData.TradingSignal signal = CurrencyPairData.TradingSignal.valueOf(parts[1]);
-                        lastKnownSignals.put(currencyPair, signal);
+                        
+                        // Prozent (falls vorhanden, sonst 50% als Default)
+                        double buyPercentage = 50.0;
+                        if (parts.length >= 3) {
+                            try {
+                                buyPercentage = Double.parseDouble(parts[2]);
+                            } catch (NumberFormatException e) {
+                                LOGGER.warning("Ungültiger Prozent-Wert in Zeile: " + line);
+                            }
+                        }
+                        
+                        lastKnownSignals.put(currencyPair, new SignalWithPercentage(signal, buyPercentage));
                     }
                 }
                 
@@ -257,7 +284,8 @@ public class SignalChangeHistoryManager {
             for (CurrencyPairData data : newData) {
                 String currencyPair = data.getCurrencyPair();
                 CurrencyPairData.TradingSignal currentSignal = data.getTradingSignal();
-                CurrencyPairData.TradingSignal lastSignal = lastKnownSignals.get(currencyPair);
+                SignalWithPercentage lastSignalData = lastKnownSignals.get(currencyPair);
+                CurrencyPairData.TradingSignal lastSignal = lastSignalData != null ? lastSignalData.getSignal() : null;
                 
                 // Prüfe auf Signalwechsel
                 if (lastSignal != null && lastSignal != currentSignal) {
@@ -267,7 +295,7 @@ public class SignalChangeHistoryManager {
                         lastSignal,
                         currentSignal,
                         data.getTimestamp(),
-                        getLastBuyPercentageForPair(currencyPair, data.getBuyPercentage()),
+                        lastSignalData.getBuyPercentage(),
                         data.getBuyPercentage()
                     );
                     
@@ -278,7 +306,7 @@ public class SignalChangeHistoryManager {
                 }
                 
                 // Aktualisiere letztes bekanntes Signal
-                lastKnownSignals.put(currencyPair, currentSignal);
+                lastKnownSignals.put(currencyPair, new SignalWithPercentage(currentSignal, data.getBuyPercentage()));
             }
             
             // Speichere erkannte Wechsel
@@ -607,11 +635,16 @@ public class SignalChangeHistoryManager {
             LOGGER.info("Speichere " + lastKnownSignals.size() + " letzte bekannte Signale...");
             
             try (BufferedWriter writer = Files.newBufferedWriter(lastSignalsFilePath, StandardCharsets.UTF_8)) {
-                writer.write("Währungspaar;Letztes_Signal");
+                writer.write("Währungspaar;Letztes_Signal;Prozent");
                 writer.newLine();
                 
-                for (Map.Entry<String, CurrencyPairData.TradingSignal> entry : lastKnownSignals.entrySet()) {
-                    writer.write(entry.getKey() + ";" + entry.getValue().name());
+                for (Map.Entry<String, SignalWithPercentage> entry : lastKnownSignals.entrySet()) {
+                    SignalWithPercentage signalData = entry.getValue();
+                    writer.write(String.format("%s;%s;%d", 
+                        entry.getKey(), 
+                        signalData.getSignal().name(),
+                        Math.round(signalData.getBuyPercentage())
+                    ));
                     writer.newLine();
                 }
                 
@@ -712,19 +745,23 @@ public class SignalChangeHistoryManager {
         
         try (BufferedWriter writer = Files.newBufferedWriter(tmpFilePath, StandardCharsets.UTF_8)) {
             // Header schreiben (konvertiert)
-            writer.write("Waehrungspaar;Letztes_Signal");
+            writer.write("Waehrungspaar;Letztes_Signal;Prozent");
             writer.newLine();
             
             int convertedCount = 0;
             int totalCount = 0;
             
             // Konvertiere und schreibe Daten
-            for (Map.Entry<String, CurrencyPairData.TradingSignal> entry : lastKnownSignals.entrySet()) {
+            for (Map.Entry<String, SignalWithPercentage> entry : lastKnownSignals.entrySet()) {
                 String originalPair = entry.getKey();
                 String convertedPair = convertCurrencyPairForMetaTrader(originalPair);
-                CurrencyPairData.TradingSignal signal = entry.getValue();
+                SignalWithPercentage signalData = entry.getValue();
                 
-                writer.write(convertedPair + ";" + signal.name());
+                writer.write(String.format("%s;%s;%d", 
+                    convertedPair, 
+                    signalData.getSignal().name(),
+                    Math.round(signalData.getBuyPercentage())
+                ));
                 writer.newLine();
                 
                 totalCount++;

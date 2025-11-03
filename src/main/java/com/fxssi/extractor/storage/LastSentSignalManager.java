@@ -166,6 +166,12 @@ public class LastSentSignalManager {
                 
                 LOGGER.info("Letzte gesendete Signale geladen: " + lastSentSignals.size() + " Währungspaare");
                 
+                // NEU: Synchronisiere geladene Signale sofort zu MetaTrader (erstellt/aktualisiert die Datei)
+                if (!lastSentSignals.isEmpty()) {
+                    syncToMetaTraderDirectories();
+                    LOGGER.info("MetaTrader-Sync-Datei nach Laden aktualisiert");
+                }
+                
             } catch (Exception e) {
                 LOGGER.log(Level.SEVERE, "DEBUG: FEHLER beim Laden der letzten gesendeten Signale: " + e.getMessage(), e);
             }
