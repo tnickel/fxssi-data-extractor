@@ -55,9 +55,45 @@ An advanced Java tool for automated extraction and analysis of Forex sentiment d
 - JavaFX 17+ (for GUI mode)  
 - Internet connection for FXSSI.com  
 - GMX email account (optional, for notifications)
-------------
-German:
--Server-Integration
+
+
+## 🚀 Installation
+
+### 1. Clone the Repository
+```bash
+git clone https://github.com/yourusername/fxssi-data-extractor.git
+cd fxssi-data-extractor
+-------------------
+German Description:
+FXSSI Data Extractor - Programmbeschreibung
+FXSSI Data Extractor ist ein fortgeschrittenes Java-Tool zur automatisierten Extraktion und Analyse von Forex-Sentiment-Daten von der Website FXSSI.com.
+
+Hauptzweck
+Das Programm sammelt automatisch Buy/Sell-Verhältnisse (Current Ratio) für verschiedene Währungspaare und analysiert diese Sentiment-Daten, um Trading-Signale zu generieren. Es verwendet einen Contrarian-Approach - wenn viele Trader auf "Buy" setzen, könnte das ein Signal für "Sell" sein und umgekehrt.
+
+Zwei Betriebsmodi
+Console-Modus: Läuft im Hintergrund und sammelt automatisch stündlich Daten
+GUI-Modus: Interaktive JavaFX-Oberfläche mit Live-Monitoring und visuellen Darstellungen
+Kernfunktionen
+Datenextraktion:
+
+Automatisches Scraping von FXSSI.com mit JSoup (HTML-Parser)
+Robuste Extraktion mit Fallback-Strategien
+Stündliche automatische Datensammlung
+Datenspeicherung:
+
+4-fache Speicherung: Täglich + pro Währungspaar + Signalwechsel + Email-Konfiguration
+CSV-Format mit UTF-8-Encoding
+Automatische Backup- und Cleanup-Funktionen
+Signal-Erkennung:
+
+Automatische Erkennung von Signalwechseln (BUY ↔ SELL)
+Historische Analyse pro Währungspaar
+Trading-Signal-Generierung (BUY/SELL/NEUTRAL)
+Email-Benachrichtigungen:
+
+Automatische Benachrichtigungen bei kritischen Signalwechseln
+GMX-Server-Integration
 Anti-Spam-System mit konfigurierbaren Schwellwerten
 Wichtigkeits-Filterung (Kritisch/Hoch/Mittel/Niedrig)
 MetaTrader-Integration:
@@ -85,10 +121,3 @@ Signalwechsel in Echtzeit überwachen wollen
 Historische Sentiment-Analysen durchführen möchten
 Automatische Benachrichtigungen bei wichtigen Marktveränderungen erhalten wollen
 Das Programm läuft kontinuierlich im Hintergrund und warnt dich automatisch, wenn wichtige Sentiment-Änderungen auftreten, die potenziell profitable Trading-Möglichkeiten signalisieren könnten.
-
-## 🚀 Installation
-
-### 1. Clone the Repository
-```bash
-git clone https://github.com/yourusername/fxssi-data-extractor.git
-cd fxssi-data-extractor
