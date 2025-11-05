@@ -63,8 +63,8 @@ An advanced Java tool for automated extraction and analysis of Forex sentiment d
 ```bash
 git clone https://github.com/yourusername/fxssi-data-extractor.git
 cd fxssi-data-extractor
--------------------
-German Description:
+
+#German Description:
 FXSSI Data Extractor - Programmbeschreibung
 FXSSI Data Extractor ist ein fortgeschrittenes Java-Tool zur automatisierten Extraktion und Analyse von Forex-Sentiment-Daten von der Website FXSSI.com.
 
@@ -82,42 +82,4 @@ Robuste Extraktion mit Fallback-Strategien
 Stündliche automatische Datensammlung
 Datenspeicherung:
 
-4-fache Speicherung: Täglich + pro Währungspaar + Signalwechsel + Email-Konfiguration
-CSV-Format mit UTF-8-Encoding
-Automatische Backup- und Cleanup-Funktionen
-Signal-Erkennung:
-
-Automatische Erkennung von Signalwechseln (BUY ↔ SELL)
-Historische Analyse pro Währungspaar
-Trading-Signal-Generierung (BUY/SELL/NEUTRAL)
-Email-Benachrichtigungen:
-
-Automatische Benachrichtigungen bei kritischen Signalwechseln
-GMX-Server-Integration
-Anti-Spam-System mit konfigurierbaren Schwellwerten
-Wichtigkeits-Filterung (Kritisch/Hoch/Mittel/Niedrig)
-MetaTrader-Integration:
-
-Synchronisation zu 1-2 MetaTrader-Verzeichnissen
-Automatische Währungsersetzung (XAUUSD→GOLD, XAGUSD→SILBER)
-GUI-Features:
-
-Moderne JavaFX-Oberfläche
-Auto-Refresh (1-60 Minuten konfigurierbar)
-Visuelle Ratio-Balken für Buy/Sell-Verhältnisse
-Historische Datenansicht
-Email-Konfigurationsfenster
-Technische Details
-Sprache: Java 11+
-GUI-Framework: JavaFX 17+
-Web-Scraping: JSoup
-Build-Tool: Maven
-Architektur: Modulares Design mit Service-Layer-Pattern
-Anwendungsfälle
-Ideal für Forex-Trader, die:
-
-Sentiment-Daten automatisch sammeln möchten
-Signalwechsel in Echtzeit überwachen wollen
-Historische Sentiment-Analysen durchführen möchten
-Automatische Benachrichtigungen bei wichtigen Marktveränderungen erhalten wollen
-Das Programm läuft kontinuierlich im Hintergrund und warnt dich automatisch, wenn wichtige Sentiment-Änderungen auftreten, die potenziell profitable Trading-Möglichkeiten signalisieren könnten.
+4
