@@ -64,22 +64,3 @@ An advanced Java tool for automated extraction and analysis of Forex sentiment d
 git clone https://github.com/yourusername/fxssi-data-extractor.git
 cd fxssi-data-extractor
 
-#German Description:
-FXSSI Data Extractor - Programmbeschreibung
-FXSSI Data Extractor ist ein fortgeschrittenes Java-Tool zur automatisierten Extraktion und Analyse von Forex-Sentiment-Daten von der Website FXSSI.com.
-
-Hauptzweck
-Das Programm sammelt automatisch Buy/Sell-Verhältnisse (Current Ratio) für verschiedene Währungspaare und analysiert diese Sentiment-Daten, um Trading-Signale zu generieren. Es verwendet einen Contrarian-Approach - wenn viele Trader auf "Buy" setzen, könnte das ein Signal für "Sell" sein und umgekehrt.
-
-Zwei Betriebsmodi
-Console-Modus: Läuft im Hintergrund und sammelt automatisch stündlich Daten
-GUI-Modus: Interaktive JavaFX-Oberfläche mit Live-Monitoring und visuellen Darstellungen
-Kernfunktionen
-Datenextraktion:
-
-Automatisches Scraping von FXSSI.com mit JSoup (HTML-Parser)
-Robuste Extraktion mit Fallback-Strategien
-Stündliche automatische Datensammlung
-Datenspeicherung:
-
-4
