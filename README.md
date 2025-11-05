@@ -54,7 +54,37 @@ An advanced Java tool for automated extraction and analysis of Forex sentiment d
 - Java 11 or higher  
 - JavaFX 17+ (for GUI mode)  
 - Internet connection for FXSSI.com  
-- GMX email account (optional, for notifications)  
+- GMX email account (optional, for notifications)
+------------
+German:
+-Server-Integration
+Anti-Spam-System mit konfigurierbaren Schwellwerten
+Wichtigkeits-Filterung (Kritisch/Hoch/Mittel/Niedrig)
+MetaTrader-Integration:
+
+Synchronisation zu 1-2 MetaTrader-Verzeichnissen
+Automatische Währungsersetzung (XAUUSD→GOLD, XAGUSD→SILBER)
+GUI-Features:
+
+Moderne JavaFX-Oberfläche
+Auto-Refresh (1-60 Minuten konfigurierbar)
+Visuelle Ratio-Balken für Buy/Sell-Verhältnisse
+Historische Datenansicht
+Email-Konfigurationsfenster
+Technische Details
+Sprache: Java 11+
+GUI-Framework: JavaFX 17+
+Web-Scraping: JSoup
+Build-Tool: Maven
+Architektur: Modulares Design mit Service-Layer-Pattern
+Anwendungsfälle
+Ideal für Forex-Trader, die:
+
+Sentiment-Daten automatisch sammeln möchten
+Signalwechsel in Echtzeit überwachen wollen
+Historische Sentiment-Analysen durchführen möchten
+Automatische Benachrichtigungen bei wichtigen Marktveränderungen erhalten wollen
+Das Programm läuft kontinuierlich im Hintergrund und warnt dich automatisch, wenn wichtige Sentiment-Änderungen auftreten, die potenziell profitable Trading-Möglichkeiten signalisieren könnten.
 
 ## 🚀 Installation
 
