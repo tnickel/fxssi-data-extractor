@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <install4j version="8.0.11" transformSequenceNumber="8">
   <directoryPresets config="D:/git/eclipse-workspace2025/fxssi-data-extractor/Setup/pictures" />
-  <application name="FXSSI" applicationId="0328-3250-6084-3097" mediaDir="//ds918/Forex/tmp" compression="1" shortName="FXSSI" publisher="Thomas Nickel" publisherWeb="https://monitortool.jimdofree.com/" version="0.1.2" autoSave="true" macVolumeId="b47bb94d2307a995" javaMinVersion="17" javaMaxVersion="21" />
+  <application name="FXSSI" applicationId="0328-3250-6084-3097" mediaDir="//ds918/Forex/tmp" compression="1" shortName="FXSSI" publisher="Thomas Nickel" publisherWeb="https://monitortool.jimdofree.com/" version="1.0.0" autoSave="true" macVolumeId="b47bb94d2307a995" javaMinVersion="17" javaMaxVersion="21" />
   <files>
     <mountPoints>
       <mountPoint id="115" />
