@@ -54,7 +54,8 @@ An advanced Java tool for automated extraction and analysis of Forex sentiment d
 - Java 11 or higher  
 - JavaFX 17+ (for GUI mode)  
 - Internet connection for FXSSI.com  
-- GMX email account (optional, for notifications)  
+- GMX email account (optional, for notifications)
+
 
 ## 🚀 Installation
 
@@ -62,3 +63,4 @@ An advanced Java tool for automated extraction and analysis of Forex sentiment d
 ```bash
 git clone https://github.com/yourusername/fxssi-data-extractor.git
 cd fxssi-data-extractor
+
