@@ -108,23 +108,23 @@ public class LastSentSignalManager {
         try {
             createSignalChangesDirectory();
             
-            LOGGER.info("DEBUG: Datei-Pfad: " + lastSentFilePath.toAbsolutePath());
-            LOGGER.info("DEBUG: Datei existiert: " + Files.exists(lastSentFilePath));
+            LOGGER.info("Datei-Pfad: " + lastSentFilePath.toAbsolutePath());
+            LOGGER.info("Datei existiert: " + Files.exists(lastSentFilePath));
             
             if (!Files.exists(lastSentFilePath)) {
-                LOGGER.info("DEBUG: Keine gespeicherten letzten gesendeten Signale gefunden - beginne mit leerer Liste");
+                LOGGER.info("Keine gespeicherten letzten gesendeten Signale gefunden - beginne mit leerer Liste");
                 return;
             }
             
             long fileSize = Files.size(lastSentFilePath);
-            LOGGER.info("DEBUG: Datei-Größe: " + fileSize + " Bytes");
+            LOGGER.info("Datei-Größe: " + fileSize + " Bytes");
             
             if (fileSize == 0) {
-                LOGGER.warning("DEBUG: WARNUNG - Datei ist leer!");
+                LOGGER.warning("WARNUNG - Datei ist leer!");
                 return;
             }
             
-            LOGGER.info("DEBUG: Öffne BufferedReader...");
+            LOGGER.info("Öffne BufferedReader...");
             try (BufferedReader reader = Files.newBufferedReader(lastSentFilePath, StandardCharsets.UTF_8)) {
                 String line;
                 boolean isFirstLine = true;
@@ -134,34 +134,32 @@ public class LastSentSignalManager {
                 
                 while ((line = reader.readLine()) != null) {
                     lineNumber++;
-                    LOGGER.fine("DEBUG: Lese Zeile " + lineNumber + ": " + line);
-                    
+
                     if (isFirstLine) {
                         isFirstLine = false;
-                        LOGGER.info("DEBUG: Header übersprungen: " + line);
+                        LOGGER.info("Header übersprungen: " + line);
                         continue; // Überspringe Header
                     }
-                    
+
                     try {
                         LastSentSignal lastSent = LastSentSignal.fromCsvLine(line);
                         lastSentSignals.put(lastSent.getCurrencyPair(), lastSent);
                         loadedCount++;
-                        LOGGER.fine("DEBUG: Signal geladen: " + lastSent.toString());
                     } catch (Exception e) {
                         skippedCount++;
-                        LOGGER.warning("DEBUG: Ungültige LastSent-Zeile übersprungen (Zeile " + lineNumber + "): " + line + " - Fehler: " + e.getMessage());
+                        LOGGER.warning("Ungültige LastSent-Zeile übersprungen (Zeile " + lineNumber + "): " + line + " - Fehler: " + e.getMessage());
                     }
                 }
                 
-                LOGGER.info("DEBUG: Datei-Analyse abgeschlossen:");
-                LOGGER.info("DEBUG:   - Gesamte Zeilen: " + lineNumber);
-                LOGGER.info("DEBUG:   - Erfolgreich geladen: " + loadedCount);
-                LOGGER.info("DEBUG:   - Übersprungen/Fehler: " + skippedCount);
-                LOGGER.info("DEBUG:   - Cache-Größe: " + lastSentSignals.size());
+                LOGGER.info("Datei-Analyse abgeschlossen:");
+                LOGGER.info("  - Gesamte Zeilen: " + lineNumber);
+                LOGGER.info("  - Erfolgreich geladen: " + loadedCount);
+                LOGGER.info("  - Übersprungen/Fehler: " + skippedCount);
+                LOGGER.info("  - Cache-Größe: " + lastSentSignals.size());
                 
-                LOGGER.info("DEBUG: Geladene Signale:");
+                LOGGER.info("Geladene Signale:");
                 for (Map.Entry<String, LastSentSignal> entry : lastSentSignals.entrySet()) {
-                    LOGGER.info("DEBUG:   " + entry.getKey() + " -> " + entry.getValue().toString());
+                    LOGGER.info("  " + entry.getKey() + " -> " + entry.getValue().toString());
                 }
                 
                 LOGGER.info("Letzte gesendete Signale geladen: " + lastSentSignals.size() + " Währungspaare");
@@ -173,11 +171,11 @@ public class LastSentSignalManager {
                 }
                 
             } catch (Exception e) {
-                LOGGER.log(Level.SEVERE, "DEBUG: FEHLER beim Laden der letzten gesendeten Signale: " + e.getMessage(), e);
+                LOGGER.log(Level.SEVERE, "FEHLER beim Laden der letzten gesendeten Signale: " + e.getMessage(), e);
             }
             
         } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "DEBUG: IO-FEHLER bei loadLastSentSignals: " + e.getMessage(), e);
+            LOGGER.log(Level.SEVERE, "IO-FEHLER bei loadLastSentSignals: " + e.getMessage(), e);
         } finally {
             managerLock.unlock();
             LOGGER.info("=== DEBUG: loadLastSentSignals beendet ===");
@@ -583,70 +581,70 @@ public class LastSentSignalManager {
         LOGGER.info("=== DEBUG: saveLastSentSignals gestartet ===");
         
         try {
-            LOGGER.info("DEBUG: Erstelle Signal-Verzeichnis...");
+            LOGGER.info("Erstelle Signal-Verzeichnis...");
             createSignalChangesDirectory();
-            LOGGER.info("DEBUG: Signal-Verzeichnis OK");
+            LOGGER.info("Signal-Verzeichnis OK");
             
-            LOGGER.info("DEBUG: Datei-Pfad: " + lastSentFilePath.toAbsolutePath());
-            LOGGER.info("DEBUG: Verzeichnis existiert: " + Files.exists(signalChangesPath));
-            LOGGER.info("DEBUG: Datei existiert vor Schreibung: " + Files.exists(lastSentFilePath));
+            LOGGER.info("Datei-Pfad: " + lastSentFilePath.toAbsolutePath());
+            LOGGER.info("Verzeichnis existiert: " + Files.exists(signalChangesPath));
+            LOGGER.info("Datei existiert vor Schreibung: " + Files.exists(lastSentFilePath));
             
-            LOGGER.info("DEBUG: Cache enthält " + lastSentSignals.size() + " Einträge:");
+            LOGGER.info("Cache enthält " + lastSentSignals.size() + " Einträge:");
             for (Map.Entry<String, LastSentSignal> entry : lastSentSignals.entrySet()) {
-                LOGGER.info("DEBUG:   " + entry.getKey() + " -> " + entry.getValue().toCsvLine());
+                LOGGER.info("  " + entry.getKey() + " -> " + entry.getValue().toCsvLine());
             }
             
-            LOGGER.info("DEBUG: Öffne BufferedWriter...");
+            LOGGER.info("Öffne BufferedWriter...");
             try (BufferedWriter writer = Files.newBufferedWriter(lastSentFilePath, StandardCharsets.UTF_8)) {
-                LOGGER.info("DEBUG: Schreibe Header...");
+                LOGGER.info("Schreibe Header...");
                 String header = LastSentSignal.getCsvHeader();
-                LOGGER.info("DEBUG: Header: " + header);
+                LOGGER.info("Header: " + header);
                 writer.write(header);
                 writer.newLine();
                 
-                LOGGER.info("DEBUG: Schreibe " + lastSentSignals.size() + " Datenzeilen...");
+                LOGGER.info("Schreibe " + lastSentSignals.size() + " Datenzeilen...");
                 int lineCount = 0;
                 for (LastSentSignal signal : lastSentSignals.values()) {
                     String csvLine = signal.toCsvLine();
-                    LOGGER.info("DEBUG: Zeile " + (++lineCount) + ": " + csvLine);
+                    LOGGER.info("Zeile " + (++lineCount) + ": " + csvLine);
                     writer.write(csvLine);
                     writer.newLine();
                 }
                 
-                LOGGER.info("DEBUG: Alle Daten geschrieben, rufe flush() auf...");
+                LOGGER.info("Alle Daten geschrieben, rufe flush() auf...");
                 writer.flush();
-                LOGGER.info("DEBUG: flush() abgeschlossen");
+                LOGGER.info("flush() abgeschlossen");
             }
             
             // Verifikation nach dem Schreiben
-            LOGGER.info("DEBUG: Datei existiert nach Schreibung: " + Files.exists(lastSentFilePath));
+            LOGGER.info("Datei existiert nach Schreibung: " + Files.exists(lastSentFilePath));
             if (Files.exists(lastSentFilePath)) {
                 long fileSize = Files.size(lastSentFilePath);
-                LOGGER.info("DEBUG: Datei-Größe nach Schreibung: " + fileSize + " Bytes");
+                LOGGER.info("Datei-Größe nach Schreibung: " + fileSize + " Bytes");
                 
                 if (fileSize > 0) {
-                    LOGGER.info("DEBUG: Lese Datei zur Verifikation...");
+                    LOGGER.info("Lese Datei zur Verifikation...");
                     List<String> lines = Files.readAllLines(lastSentFilePath, StandardCharsets.UTF_8);
-                    LOGGER.info("DEBUG: Datei enthält " + lines.size() + " Zeilen:");
+                    LOGGER.info("Datei enthält " + lines.size() + " Zeilen:");
                     for (int i = 0; i < lines.size() && i < 10; i++) { // Maximal 10 Zeilen loggen
-                        LOGGER.info("DEBUG:   Zeile " + (i+1) + ": " + lines.get(i));
+                        LOGGER.info("  Zeile " + (i+1) + ": " + lines.get(i));
                     }
                 } else {
-                    LOGGER.warning("DEBUG: WARNUNG - Datei ist leer nach dem Schreiben!");
+                    LOGGER.warning("WARNUNG - Datei ist leer nach dem Schreiben!");
                 }
             } else {
-                LOGGER.severe("DEBUG: FEHLER - Datei existiert nicht nach dem Schreiben!");
+                LOGGER.severe("FEHLER - Datei existiert nicht nach dem Schreiben!");
             }
             
-            LOGGER.info("DEBUG: Letzte gesendete Signale gespeichert: " + lastSentSignals.size() + " Einträge");
+            LOGGER.info("Letzte gesendete Signale gespeichert: " + lastSentSignals.size() + " Einträge");
             
         } catch (IOException e) {
-            LOGGER.log(Level.SEVERE, "DEBUG: IO-FEHLER beim Speichern der letzten gesendeten Signale: " + e.getMessage(), e);
-            LOGGER.severe("DEBUG: Datei-Pfad: " + lastSentFilePath.toAbsolutePath());
-            LOGGER.severe("DEBUG: Verzeichnis-Rechte: " + (Files.isWritable(signalChangesPath) ? "Schreibbar" : "Nicht schreibbar"));
+            LOGGER.log(Level.SEVERE, "IO-FEHLER beim Speichern der letzten gesendeten Signale: " + e.getMessage(), e);
+            LOGGER.severe("Datei-Pfad: " + lastSentFilePath.toAbsolutePath());
+            LOGGER.severe("Verzeichnis-Rechte: " + (Files.isWritable(signalChangesPath) ? "Schreibbar" : "Nicht schreibbar"));
             throw new RuntimeException("Fehler beim Speichern der LastSent-Signale", e);
         } catch (Exception e) {
-            LOGGER.log(Level.SEVERE, "DEBUG: UNBEKANNTER FEHLER beim Speichern: " + e.getMessage(), e);
+            LOGGER.log(Level.SEVERE, "UNBEKANNTER FEHLER beim Speichern: " + e.getMessage(), e);
             throw new RuntimeException("Unbekannter Fehler beim Speichern der LastSent-Signale", e);
         } finally {
             LOGGER.info("=== DEBUG: saveLastSentSignals beendet ===");

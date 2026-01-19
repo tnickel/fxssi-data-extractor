@@ -1,4 +1,4 @@
-package com.fxsssi.extractor.gui;
+package com.fxssi.extractor.gui;
 
 import javafx.application.Application;
 import javafx.scene.Scene;

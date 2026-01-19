@@ -1,4 +1,4 @@
-package com.fxsssi.extractor.gui;
+package com.fxssi.extractor.gui;
 
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;

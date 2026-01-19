@@ -1,4 +1,4 @@
-package com.fxsssi.extractor.gui;
+package com.fxssi.extractor.gui;
 
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -1031,8 +1031,10 @@ public class MainWindowController {
             }
             
             LOGGER.info("Prüfe " + recentChanges.size() + " aktuelle Signalwechsel für E-Mail-Versendung...");
-            
+
             // Sende E-Mail-Benachrichtigung
+            // TODO: Migriere zu sendSignalChangeNotificationWithThreshold() sobald SignalChangeEvent-Daten verfügbar sind
+            @SuppressWarnings("deprecation")
             EmailService.EmailSendResult result = emailService.sendSignalChangeNotification(recentChanges);
             
             if (result.isSuccess()) {

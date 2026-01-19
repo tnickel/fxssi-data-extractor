@@ -11,14 +11,14 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.stream.Collectors;
 
-import javax.mail.Authenticator;
-import javax.mail.Message;
-import javax.mail.MessagingException;
-import javax.mail.PasswordAuthentication;
-import javax.mail.Session;
-import javax.mail.Transport;
-import javax.mail.internet.InternetAddress;
-import javax.mail.internet.MimeMessage;
+import jakarta.mail.Authenticator;
+import jakarta.mail.Message;
+import jakarta.mail.MessagingException;
+import jakarta.mail.PasswordAuthentication;
+import jakarta.mail.Session;
+import jakarta.mail.Transport;
+import jakarta.mail.internet.InternetAddress;
+import jakarta.mail.internet.MimeMessage;
 
 import com.fxssi.extractor.model.CurrencyPairData;
 import com.fxssi.extractor.model.SignalChangeEvent;
@@ -356,7 +356,19 @@ public class EmailService {
     
     /**
      * Sendet E-Mail-Benachrichtigung bei Signalwechseln (alte Methode, für Kompatibilität)
+     *
+     * <p>Diese Methode ist veraltet und sollte nicht mehr für neue Implementierungen verwendet werden.
+     * Sie bleibt vorerst bestehen, da sie noch in MainWindowController.java verwendet wird.</p>
+     *
+     * <p><b>Migration-Hinweis:</b> Die neue Methode sendSignalChangeNotificationWithThreshold()
+     * verwendet ein anderes Datenmodell (CurrencyPairData statt SignalChangeEvent) und
+     * bietet erweiterte Threshold-basierte Filterung.</p>
+     *
+     * @param changes Liste der Signalwechsel-Events
+     * @return EmailSendResult mit Erfolgs-Status und Nachricht
      * @deprecated Verwende stattdessen sendSignalChangeNotificationWithThreshold()
+     *             Diese Methode wird in einer zukünftigen Version entfernt.
+     * @see #sendSignalChangeNotificationWithThreshold(List)
      */
     @Deprecated
     public EmailSendResult sendSignalChangeNotification(List<SignalChangeEvent> changes) {

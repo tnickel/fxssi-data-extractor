@@ -1,4 +1,4 @@
-package com.fxsssi.extractor.gui;
+package com.fxssi.extractor.gui;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
