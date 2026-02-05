@@ -12,6 +12,7 @@ import java.util.logging.Logger;
 import com.fxssi.extractor.model.CurrencyPairData;
 import com.fxssi.extractor.model.SignalChangeEvent;
 import com.fxssi.extractor.scraper.FXSSIScraper;
+import com.fxssi.extractor.scraper.FearGreedScraper;
 import com.fxssi.extractor.storage.DataFileManager;
 import com.fxssi.extractor.storage.CurrencyPairDataManager;
 import com.fxssi.extractor.storage.SignalChangeHistoryManager;
@@ -23,8 +24,10 @@ import com.fxssi.extractor.notification.EmailConfig;
  * Integriert die bestehenden Scraper- und Storage-Komponenten mit konfigurierbarem Datenverzeichnis
  * Jetzt mit vollständiger E-Mail-Integration: tägliche UND währungspaar-spezifische Dateien UND Signalwechsel-Erkennung UND E-Mail-Benachrichtigungen
  * 
+ * ERWEITERT: Integration des CNN Fear & Greed Index als BTC/USD Symbol
+ * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.5 (mit korrigierter E-Mail-Integration - Threshold-System aktiviert)
+ * @version 1.6 (mit Fear & Greed Index Integration)
  */
 public class GuiDataService {
     
@@ -33,6 +36,7 @@ public class GuiDataService {
     private static final int CACHE_TIMEOUT_MINUTES = 2; // Cache-Timeout in Minuten
     
     private FXSSIScraper scraper;
+    private FearGreedScraper fearGreedScraper;
     private DataFileManager fileManager;
     private CurrencyPairDataManager currencyPairManager;
     private SignalChangeHistoryManager signalChangeManager;
@@ -58,19 +62,24 @@ public class GuiDataService {
         this.dataDirectory = validateAndNormalizeDataDirectory(dataDirectory);
         this.cachedData = new ArrayList<>();
         LOGGER.info("GuiDataService erstellt mit Datenverzeichnis: " + this.dataDirectory);
-        LOGGER.info("Vierfache Integration aktiviert: Tägliche + Währungspaar-spezifische + Signalwechsel + E-Mail-Benachrichtigungen mit Threshold-System");
+        LOGGER.info("Fünffache Integration aktiviert: Tägliche + Währungspaar-spezifische + Signalwechsel + E-Mail-Benachrichtigungen + Fear & Greed Index");
     }
     
     /**
-     * Initialisiert den Datenservice mit korrigierter E-Mail-Integration
+     * Initialisiert den Datenservice mit korrigierter E-Mail-Integration und Fear & Greed Scraper
      */
     public void initialize() {
         try {
-            LOGGER.info("Initialisiere GuiDataService mit korrigierter E-Mail-Integration...");
+            LOGGER.info("Initialisiere GuiDataService mit Fear & Greed Integration...");
             LOGGER.info("Datenverzeichnis: " + dataDirectory);
             
             // Initialisiere Komponenten mit konfiguriertem Datenverzeichnis
             scraper = new FXSSIScraper(dataDirectory);
+            
+            // NEU: Fear & Greed Scraper für BTC/USD
+            fearGreedScraper = new FearGreedScraper(dataDirectory);
+            LOGGER.info("Fear & Greed Scraper initialisiert für Symbol: " + fearGreedScraper.getSymbol());
+            
             fileManager = new DataFileManager(dataDirectory);
             currencyPairManager = new CurrencyPairDataManager(dataDirectory);
             
@@ -91,16 +100,21 @@ public class GuiDataService {
             // Lade letzte bekannte Signale für Wechsel-Erkennung
             signalChangeManager.loadLastKnownSignals();
             
-            // Teste Verbindung
-            boolean connectionOk = scraper.testConnection();
-            if (!connectionOk) {
+            // Teste Verbindungen
+            boolean fxssiConnectionOk = scraper.testConnection();
+            if (!fxssiConnectionOk) {
                 LOGGER.warning("Verbindung zu FXSSI fehlgeschlagen - verwende gespeicherte Daten");
             }
             
-            isInitialized = true;
-            LOGGER.info("GuiDataService erfolgreich initialisiert mit korrigierter E-Mail-Integration und Threshold-System");
+            boolean fearGreedConnectionOk = fearGreedScraper.testConnection();
+            if (!fearGreedConnectionOk) {
+                LOGGER.warning("Verbindung zu CNN Fear & Greed API fehlgeschlagen");
+            }
             
-            // Logge initiale Statistiken inklusive E-Mail-Status
+            isInitialized = true;
+            LOGGER.info("GuiDataService erfolgreich initialisiert mit Fear & Greed Integration und Threshold-System");
+            
+            // Logge initiale Statistiken inklusive E-Mail-Status und Fear & Greed
             logInitialStatisticsWithEmail();
             
         } catch (Exception e) {
@@ -112,6 +126,7 @@ public class GuiDataService {
     /**
      * Holt aktuelle Daten (mit Caching für Performance)
      * WICHTIG: Speichert bei jedem Refresh in ALLE SYSTEME mit automatischen Threshold-E-Mails
+     * ERWEITERT: Kombiniert FXSSI-Daten mit Fear & Greed Index
      */
     public List<CurrencyPairData> getCurrentData() throws Exception {
         if (!isInitialized) {
@@ -131,14 +146,17 @@ public class GuiDataService {
             List<CurrencyPairData> freshData = scraper.extractCurrentRatioData();
             
             if (freshData != null && !freshData.isEmpty()) {
+                // KOMBINIERE MIT FEAR & GREED INDEX
+                List<CurrencyPairData> combinedData = combineWithFearGreedData(freshData);
+                
                 // SPEICHERE IN ALLE SYSTEME mit automatischen Threshold-E-Mails
-                saveToAllSystems(freshData);
+                saveToAllSystems(combinedData);
                 
                 // Aktualisiere Cache
-                updateCache(freshData);
+                updateCache(combinedData);
                 
-                LOGGER.info("GUI-Refresh: " + freshData.size() + " Datensätze geladen und in alle Speichersysteme mit Threshold-E-Mail-System integriert");
-                return new ArrayList<>(freshData);
+                LOGGER.info("GUI-Refresh: " + combinedData.size() + " Datensätze geladen (inkl. Fear & Greed BTC/USD)");
+                return new ArrayList<>(combinedData);
             } else {
                 // Fallback: Verwende gespeicherte Daten
                 return loadFallbackData();
@@ -150,6 +168,47 @@ public class GuiDataService {
             // Fallback: Verwende gespeicherte Daten
             return loadFallbackData();
         }
+    }
+    
+    /**
+     * Lädt und kombiniert Daten aus beiden Quellen: FXSSI und Fear & Greed Index
+     * 
+     * @param fxssiData Die bereits geladenen FXSSI-Daten
+     * @return Kombinierte Liste mit allen Währungspaaren inkl. BTC/USD (Fear & Greed)
+     */
+    private List<CurrencyPairData> combineWithFearGreedData(List<CurrencyPairData> fxssiData) {
+        List<CurrencyPairData> combinedData = new ArrayList<>(fxssiData);
+        
+        try {
+            LOGGER.info("Lade Fear & Greed Index für BTC/USD...");
+            
+            CurrencyPairData fearGreedData = fearGreedScraper.extractFearGreedData();
+            
+            if (fearGreedData != null) {
+                // Prüfe ob BTC/USD bereits in der Liste ist (von vorherigem Laden)
+                boolean alreadyExists = combinedData.stream()
+                        .anyMatch(d -> d.getCurrencyPair().equals(fearGreedData.getCurrencyPair()));
+                
+                if (!alreadyExists) {
+                    combinedData.add(fearGreedData);
+                    LOGGER.info("Fear & Greed Index hinzugefügt: " + fearGreedData.getCurrencyPair() + 
+                               " | Signal: " + fearGreedData.getTradingSignal());
+                } else {
+                    // Aktualisiere vorhandenen Eintrag
+                    combinedData.removeIf(d -> d.getCurrencyPair().equals(fearGreedData.getCurrencyPair()));
+                    combinedData.add(fearGreedData);
+                    LOGGER.info("Fear & Greed Index aktualisiert: " + fearGreedData.getCurrencyPair());
+                }
+            } else {
+                LOGGER.warning("Konnte Fear & Greed Index nicht laden - verwende nur FXSSI-Daten");
+            }
+            
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "Fehler beim Laden des Fear & Greed Index: " + e.getMessage(), e);
+            // Bei Fehler nur FXSSI-Daten zurückgeben
+        }
+        
+        return combinedData;
     }
     
     /**
@@ -170,6 +229,7 @@ public class GuiDataService {
     /**
      * Führt eine manuelle Datenaktualisierung durch (für Refresh-Button)
      * GARANTIERT Speicherung in alle Systeme mit automatischen Threshold-E-Mails
+     * ERWEITERT: Kombiniert mit Fear & Greed Index
      */
     public List<CurrencyPairData> forceDataRefresh() throws Exception {
         LOGGER.info("Erzwinge manuelle Datenaktualisierung mit Threshold-E-Mail-System...");
@@ -181,14 +241,17 @@ public class GuiDataService {
         List<CurrencyPairData> freshData = scraper.extractCurrentRatioData();
         
         if (freshData != null && !freshData.isEmpty()) {
+            // KOMBINIERE MIT FEAR & GREED INDEX
+            List<CurrencyPairData> combinedData = combineWithFearGreedData(freshData);
+            
             // GARANTIERTE Speicherung in alle Systeme mit Threshold-E-Mail-System
-            saveToAllSystems(freshData);
+            saveToAllSystems(combinedData);
             
             // Aktualisiere Cache
-            updateCache(freshData);
+            updateCache(combinedData);
             
-            LOGGER.info("Manuelle Aktualisierung: " + freshData.size() + " Datensätze in alle Speichersysteme mit Threshold-E-Mail-System integriert");
-            return freshData;
+            LOGGER.info("Manueller Refresh: " + combinedData.size() + " Datensätze (inkl. Fear & Greed BTC/USD)");
+            return combinedData;
         } else {
             LOGGER.warning("Manuelle Aktualisierung: Keine neuen Daten erhalten");
             return loadFallbackData();
@@ -358,6 +421,37 @@ public class GuiDataService {
             LOGGER.log(Level.WARNING, "Fehler beim Abrufen der E-Mail-Statistiken: " + e.getMessage(), e);
             return "Fehler beim Abrufen der E-Mail-Statistiken";
         }
+    }
+    
+    /**
+     * Testet die Verbindung zum Fear & Greed Index
+     * 
+     * @return true wenn die CNN API erreichbar ist
+     */
+    public boolean testFearGreedConnection() {
+        if (fearGreedScraper == null) {
+            LOGGER.warning("FearGreedScraper nicht initialisiert");
+            return false;
+        }
+        return fearGreedScraper.testConnection();
+    }
+
+    /**
+     * Gibt das Symbol des Fear & Greed Index zurück
+     * 
+     * @return Das Symbol (BTC/USD)
+     */
+    public String getFearGreedSymbol() {
+        return fearGreedScraper != null ? fearGreedScraper.getSymbol() : "BTC/USD";
+    }
+
+    /**
+     * Gibt Informationen über die Fear & Greed Schwellenwerte zurück
+     * 
+     * @return String mit Threshold-Informationen
+     */
+    public String getFearGreedThresholdInfo() {
+        return fearGreedScraper != null ? fearGreedScraper.getThresholdInfo() : "Nicht verfügbar";
     }
     
     // ===== BESTEHENDE METHODEN (unverändert) =====
@@ -564,9 +658,10 @@ public class GuiDataService {
             String emailStats = getEmailStatistics();
             
             String detailedStats = String.format(
-                "Tägliche Dateien: %s | Währungspaare: %d verfügbar | E-Mail: %s | Datenverzeichnis: %s",
+                "Tägliche Dateien: %s | Währungspaare: %d verfügbar | E-Mail: %s | Fear & Greed: %s | Datenverzeichnis: %s",
                 dailyStats, availablePairs.size(), 
-                (emailConfig.isEmailEnabled() ? "Aktiviert (Threshold-System)" : "Deaktiviert"), 
+                (emailConfig.isEmailEnabled() ? "Aktiviert (Threshold-System)" : "Deaktiviert"),
+                (fearGreedScraper != null ? "Aktiv (" + fearGreedScraper.getSymbol() + ")" : "Inaktiv"),
                 dataDirectory
             );
             
@@ -625,7 +720,7 @@ public class GuiDataService {
         StringBuilder report = new StringBuilder();
         
         try {
-            report.append("=== GUI DATENVALIDIERUNG (ALLE SYSTEME + E-MAIL) ===\n\n");
+            report.append("=== GUI DATENVALIDIERUNG (ALLE SYSTEME + E-MAIL + FEAR & GREED) ===\n\n");
             
             // Validiere tägliche Dateien
             report.append("TÄGLICHE DATEIEN:\n");
@@ -656,6 +751,17 @@ public class GuiDataService {
             } else {
                 report.append("✗ E-Mail-Konfiguration ungültig:\n");
                 report.append(emailValidation.getErrorMessage());
+            }
+            
+            // Validiere Fear & Greed Integration
+            report.append("\nFEAR & GREED INDEX:\n");
+            if (fearGreedScraper != null) {
+                boolean fgConnected = fearGreedScraper.testConnection();
+                report.append("Symbol: ").append(fearGreedScraper.getSymbol()).append("\n");
+                report.append("Verbindung: ").append(fgConnected ? "✓ Aktiv" : "✗ Nicht erreichbar").append("\n");
+                report.append("Thresholds: ").append(fearGreedScraper.getThresholdInfo()).append("\n");
+            } else {
+                report.append("✗ FearGreedScraper nicht initialisiert\n");
             }
             
         } catch (Exception e) {
@@ -689,14 +795,14 @@ public class GuiDataService {
             // Service-Status zurücksetzen
             isInitialized = false;
             
-            LOGGER.info("GuiDataService heruntergefahren (inkl. E-Mail-Service mit Threshold-System)");
+            LOGGER.info("GuiDataService heruntergefahren (inkl. E-Mail-Service mit Threshold-System und Fear & Greed)");
             
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Fehler beim Herunterfahren des GuiDataService: " + e.getMessage(), e);
         }
     }
     
-    // ===== PRIVATE HILFSMETHODEN (unverändert) =====
+    // ===== PRIVATE HILFSMETHODEN =====
     
     /**
      * Validiert und normalisiert das Datenverzeichnis
@@ -776,7 +882,7 @@ public class GuiDataService {
     }
     
     /**
-     * Loggt initiale Statistiken mit E-Mail-Integration
+     * Loggt initiale Statistiken mit E-Mail-Integration und Fear & Greed Status
      */
     private void logInitialStatisticsWithEmail() {
         try {
@@ -784,6 +890,15 @@ public class GuiDataService {
             LOGGER.info("Initiale Statistiken: " + stats.getDetails());
             LOGGER.info("Verfügbare Währungspaare: " + stats.getAvailableCurrencyPairs());
             LOGGER.info("E-Mail-Status: " + (emailConfig.isEmailEnabled() ? "✅ Aktiviert (Threshold-System)" : "❌ Deaktiviert"));
+            
+            // Fear & Greed Status loggen
+            if (fearGreedScraper != null) {
+                boolean fgConnectionOk = fearGreedScraper.testConnection();
+                LOGGER.info("Fear & Greed API: " + (fgConnectionOk ? "✅ Verbunden" : "❌ Nicht erreichbar"));
+                LOGGER.info("Fear & Greed Symbol: " + fearGreedScraper.getSymbol());
+                LOGGER.info("Fear & Greed Thresholds: " + fearGreedScraper.getThresholdInfo());
+            }
+            
             LOGGER.fine("Signalwechsel-Statistiken: " + stats.getSignalChangeStatistics());
             LOGGER.fine("E-Mail-Statistiken: " + stats.getEmailStatistics());
         } catch (Exception e) {
@@ -805,6 +920,8 @@ public class GuiDataService {
         demoData.add(new CurrencyPairData("USD/JPY", 48.0, 52.0, CurrencyPairData.TradingSignal.NEUTRAL));
         demoData.add(new CurrencyPairData("AUD/USD", 35.0, 65.0, CurrencyPairData.TradingSignal.BUY));
         demoData.add(new CurrencyPairData("USD/CHF", 72.0, 28.0, CurrencyPairData.TradingSignal.SELL));
+        // Demo-Eintrag für Fear & Greed (neutral)
+        demoData.add(new CurrencyPairData("BTC/USD", 50.0, 50.0, CurrencyPairData.TradingSignal.NEUTRAL));
         
         return demoData;
     }

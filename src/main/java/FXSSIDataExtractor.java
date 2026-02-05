@@ -1,3 +1,4 @@
+import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
@@ -5,6 +6,7 @@ import java.util.logging.Logger;
 import com.fxssi.extractor.model.CurrencyPairData;
 import com.fxssi.extractor.scheduler.HourlyScheduler;
 import com.fxssi.extractor.scraper.FXSSIScraper;
+import com.fxssi.extractor.scraper.FearGreedScraper;
 import com.fxssi.extractor.storage.DataFileManager;
 import com.fxssi.extractor.storage.CurrencyPairDataManager;
 import com.fxsssi.extractor.gui.FXSSIGuiApplication;
@@ -14,8 +16,10 @@ import com.fxsssi.extractor.gui.FXSSIGuiApplication;
  * Unterstützt sowohl Console-Modus als auch GUI-Modus mit konfigurierbarem Root-Pfad
  * Jetzt mit währungspaar-spezifischer Datenspeicherung
  * 
+ * ERWEITERT: Integration des CNN Fear & Greed Index als BTC/USD Symbol
+ * 
  * @author Generated for FXSSI Data Extraction
- * @version 2.2 (mit CurrencyPairDataManager Integration)
+ * @version 2.3 (mit Fear & Greed Index Integration)
  */
 public class FXSSIDataExtractor {
     
@@ -29,6 +33,7 @@ public class FXSSIDataExtractor {
     private static final String DATA_DIR_ARG = "--data-dir";
     
     private FXSSIScraper scraper;
+    private FearGreedScraper fearGreedScraper;
     private DataFileManager fileManager;
     private CurrencyPairDataManager currencyPairManager;
     private HourlyScheduler scheduler;
@@ -62,6 +67,7 @@ public class FXSSIDataExtractor {
         if (!guiMode) {
             // Nur für Console-Modus initialisieren
             this.scraper = new FXSSIScraper(this.dataDirectory);
+            this.fearGreedScraper = new FearGreedScraper(this.dataDirectory);
             this.fileManager = new DataFileManager(this.dataDirectory);
             this.currencyPairManager = new CurrencyPairDataManager(this.dataDirectory);
             this.scheduler = new HourlyScheduler(this::extractAndSaveData);
@@ -74,6 +80,9 @@ public class FXSSIDataExtractor {
         LOGGER.info("FXSSIDataExtractor initialisiert - Modus: " + (guiMode ? "GUI" : "Console") + 
                    ", Datenverzeichnis: " + this.dataDirectory);
         LOGGER.info("Erweiterte Speicherung: Tägliche Dateien UND währungspaar-spezifische Dateien");
+        if (!guiMode) {
+            LOGGER.info("Fear & Greed Index aktiviert: Symbol " + fearGreedScraper.getSymbol());
+        }
     }
     
     /**
@@ -88,6 +97,7 @@ public class FXSSIDataExtractor {
         LOGGER.info("FXSSI Data Extractor gestartet (Console-Modus) - Beginne mit stündlicher Datenextraktion");
         LOGGER.info("Datenverzeichnis: " + dataDirectory);
         LOGGER.info("Speichert in: tägliche CSV-Dateien UND währungspaar-spezifische Dateien");
+        LOGGER.info("Fear & Greed Index (BTC/USD) aktiviert: " + fearGreedScraper.getThresholdInfo());
         
         // Führe eine initiale Extraktion durch
         extractAndSaveData();
@@ -127,23 +137,60 @@ public class FXSSIDataExtractor {
     }
     
     /**
+     * Gibt den FearGreedScraper zurück (für externe Zugriffe)
+     */
+    public FearGreedScraper getFearGreedScraper() {
+        return fearGreedScraper;
+    }
+    
+    /**
      * Führt die Datenextraktion durch und speichert die Ergebnisse in BEIDEN Formaten
+     * ERWEITERT: Kombiniert FXSSI-Daten mit Fear & Greed Index (BTC/USD)
      * Diese Methode wird stündlich vom Scheduler aufgerufen UND bei jedem GUI-Refresh
      */
     private void extractAndSaveData() {
         try {
-            LOGGER.info("Beginne Datenextraktion von FXSSI...");
+            LOGGER.info("Beginne Datenextraktion von FXSSI + Fear & Greed Index...");
             
+            // 1. FXSSI-Daten laden
             List<CurrencyPairData> currentData = scraper.extractCurrentRatioData();
             
-            if (currentData != null && !currentData.isEmpty()) {
+            if (currentData == null) {
+                currentData = new ArrayList<>();
+            }
+            
+            // 2. Fear & Greed Index laden und hinzufügen
+            try {
+                CurrencyPairData fearGreedData = fearGreedScraper.extractFearGreedData();
+                
+                if (fearGreedData != null) {
+                    // Prüfe ob BTC/USD bereits existiert
+                    boolean exists = currentData.stream()
+                            .anyMatch(d -> d.getCurrencyPair().equals(fearGreedData.getCurrencyPair()));
+                    
+                    if (!exists) {
+                        currentData.add(fearGreedData);
+                        LOGGER.info("Fear & Greed Index hinzugefügt: " + fearGreedData.getCurrencyPair() +
+                                   " | Index-Mapping: Buy=" + String.format("%.1f%%", fearGreedData.getBuyPercentage()) +
+                                   ", Sell=" + String.format("%.1f%%", fearGreedData.getSellPercentage()) +
+                                   " | Signal: " + fearGreedData.getTradingSignal());
+                    }
+                } else {
+                    LOGGER.warning("Fear & Greed Index konnte nicht geladen werden");
+                }
+            } catch (Exception fgError) {
+                LOGGER.log(Level.WARNING, "Fehler beim Laden des Fear & Greed Index: " + fgError.getMessage(), fgError);
+            }
+            
+            // 3. Daten speichern wenn vorhanden
+            if (!currentData.isEmpty()) {
                 // BESTEHENDE SPEICHERUNG: Tägliche CSV-Dateien
                 fileManager.appendDataToFile(currentData);
                 
                 // NEUE SPEICHERUNG: Währungspaar-spezifische Dateien
                 currencyPairManager.appendDataForAllPairs(currentData);
                 
-                LOGGER.info("Erfolgreich " + currentData.size() + " Währungspaare extrahiert und gespeichert");
+                LOGGER.info("Erfolgreich " + currentData.size() + " Währungspaare extrahiert und gespeichert (inkl. BTC/USD Fear & Greed)");
                 LOGGER.info("Daten gespeichert in: tägliche Datei UND " + currentData.size() + " währungspaar-spezifische Dateien");
                 
                 // Logge eine Zusammenfassung der extrahierten Daten
@@ -153,7 +200,7 @@ public class FXSSIDataExtractor {
                 logStorageStatistics();
                 
             } else {
-                LOGGER.warning("Keine Daten von FXSSI erhalten - möglicherweise Website-Problem");
+                LOGGER.warning("Keine Daten erhalten - möglicherweise Website-Problem");
             }
             
         } catch (Exception e) {
@@ -251,6 +298,16 @@ public class FXSSIDataExtractor {
             String currencyValidation = currencyPairManager.validateAllData();
             report.append(currencyValidation);
             
+            // Fear & Greed Status
+            report.append("\nFEAR & GREED INDEX:\n");
+            report.append("==================\n");
+            if (fearGreedScraper != null) {
+                report.append("Symbol: ").append(fearGreedScraper.getSymbol()).append("\n");
+                report.append("Thresholds: ").append(fearGreedScraper.getThresholdInfo()).append("\n");
+                boolean connected = fearGreedScraper.testConnection();
+                report.append("API-Verbindung: ").append(connected ? "✓ OK" : "✗ Fehler").append("\n");
+            }
+            
         } catch (Exception e) {
             report.append("Fehler bei der Validierung: ").append(e.getMessage()).append("\n");
         }
@@ -276,6 +333,14 @@ public class FXSSIDataExtractor {
             stats.append("WÄHRUNGSPAAR-SPEZIFISCHE SPEICHERUNG:\n");
             stats.append("====================================\n");
             stats.append(currencyPairManager.getOverallStatistics()).append("\n\n");
+            
+            // Fear & Greed Info
+            stats.append("FEAR & GREED INDEX:\n");
+            stats.append("==================\n");
+            if (fearGreedScraper != null) {
+                stats.append("Symbol: ").append(fearGreedScraper.getSymbol()).append("\n");
+                stats.append("Signal-Logik: ").append(fearGreedScraper.getThresholdInfo()).append("\n\n");
+            }
             
             // Datenverzeichnis-Info
             stats.append("KONFIGURATION:\n");
@@ -321,8 +386,8 @@ public class FXSSIDataExtractor {
      * Zeigt die Hilfe-Informationen an
      */
     private static void showHelp() {
-        System.out.println("FXSSI Data Extractor v2.2");
-        System.out.println("=========================");
+        System.out.println("FXSSI Data Extractor v2.3 (mit Fear & Greed Index)");
+        System.out.println("==================================================");
         System.out.println();
         System.out.println("Verwendung:");
         System.out.println("  java FXSSIDataExtractor [OPTIONEN]");
@@ -357,11 +422,14 @@ public class FXSSIDataExtractor {
         System.out.println("- Daten werden bei jedem Refresh in beide Formate gespeichert");
         System.out.println("- NEUE: Signalwechsel-Erkennung mit visuellen Indikatoren");
         System.out.println("- NEUE: Klickbare Signalwechsel-Historie pro Währungspaar");
+        System.out.println("- NEUE: CNN Fear & Greed Index als BTC/USD integriert");
+        System.out.println("  → Fear (0-44) = BUY Signal, Neutral (45-55), Greed (56-100) = SELL Signal");
         System.out.println();
         System.out.println("Im Console-Modus:");
         System.out.println("- Automatische stündliche Datenextraktion");
         System.out.println("- Duale CSV-Speicherung im konfigurierten Verzeichnis");
         System.out.println("- Automatische Signalwechsel-Erkennung und -Logging");
+        System.out.println("- Inklusive Fear & Greed Index für BTC/USD");
         System.out.println("- Läuft als Hintergrund-Service");
     }
     
@@ -425,6 +493,7 @@ public class FXSSIDataExtractor {
                     LOGGER.info("Starte FXSSI Data Extractor im GUI-Modus...");
                     LOGGER.info("Datenverzeichnis: " + config.dataDirectory);
                     LOGGER.info("Duale Speicherung: Tägliche UND währungspaar-spezifische Dateien");
+                    LOGGER.info("Fear & Greed Index (BTC/USD) aktiviert");
                     FXSSIGuiApplication.launchGui(args, config.dataDirectory);
                     break;
                     
@@ -432,6 +501,7 @@ public class FXSSIDataExtractor {
                     LOGGER.info("Starte FXSSI Data Extractor im Console-Modus...");
                     LOGGER.info("Datenverzeichnis: " + config.dataDirectory);
                     LOGGER.info("Duale Speicherung: Tägliche UND währungspaar-spezifische Dateien");
+                    LOGGER.info("Fear & Greed Index (BTC/USD) aktiviert");
                     startConsoleMode(config.dataDirectory);
                     break;
                     
@@ -477,7 +547,7 @@ public class FXSSIDataExtractor {
      * Konfigurationsklasse für Command Line Argumente
      */
     private static class CommandLineConfig {
-        AppMode mode = AppMode.CONSOLE;
+        AppMode mode = AppMode.GUI;
         String dataDirectory = DEFAULT_DATA_DIRECTORY;
     }
     
