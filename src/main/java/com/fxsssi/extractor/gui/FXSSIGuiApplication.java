@@ -17,7 +17,8 @@ import java.util.logging.Level;
 public class FXSSIGuiApplication extends Application {
     
     private static final Logger LOGGER = Logger.getLogger(FXSSIGuiApplication.class.getName());
-    private static final String WINDOW_TITLE = "FXSSI Data Extractor - Live Sentiment Monitor";
+    public static final String APP_VERSION = "1.0.0";
+    private static final String WINDOW_TITLE = "FXSSI Data Extractor v" + APP_VERSION + " - Live Sentiment Monitor";
     private static final int WINDOW_WIDTH = 1820;   // *** ERWEITERT: 30% größer (von 1400 auf 1820) ***
     private static final int WINDOW_HEIGHT = 1040;  // *** ERWEITERT: 30% größer (von 800 auf 1040) ***
     private static final int MIN_WINDOW_WIDTH = 1300; // *** ANGEPASST: Minimum auch erhöht (von 1000 auf 1300) ***
