@@ -950,11 +950,9 @@ public class MainWindowController {
         new Thread(() -> {
             try {
                 // WICHTIG: Diese Methode garantiert Signalwechsel-Erkennung
+                // E-Mail-Versand erfolgt automatisch über SignalChangeHistoryManager (Threshold-System)
                 List<CurrencyPairData> data = dataService.forceDataRefresh();
-                
-                // *** NEU: Signalwechsel-Benachrichtigungen per E-Mail versenden ***
-                sendSignalChangeNotificationsIfEnabled();
-                
+
                 // ✅ NEU: DIREKTE MetaTrader-Synchronisation nach jedem Refresh
                 syncMetaTraderAfterRefresh();
                 
