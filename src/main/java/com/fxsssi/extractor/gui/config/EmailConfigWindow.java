@@ -578,7 +578,10 @@ public class EmailConfigWindow {
             
             alert.setContentText(alertContent.toString());
             alert.showAndWait();
-            
+
+            // Fenster nach erfolgreichem Speichern schließen
+            stage.close();
+
         } catch (Exception e) {
             LOGGER.severe("Fehler beim Speichern der Konfiguration: " + e.getMessage());
             
