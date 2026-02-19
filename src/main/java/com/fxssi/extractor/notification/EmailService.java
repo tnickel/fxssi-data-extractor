@@ -227,18 +227,52 @@ public class EmailService {
     }
     
     /**
-     * NEU: Filtert Signale die den konfigurierten Threshold überschreiten
+     * Filtert Signale die den konfigurierten Threshold überschreiten
+     * und die konfigurierten Benachrichtigungseinstellungen erfüllen (Kritisch/Hoch/Alle).
      */
     private List<CurrencyPairData> filterSignalsAboveThreshold(List<CurrencyPairData> currencyPairData) {
         double threshold = config.getSignalChangeThreshold();
-        
+
         return currencyPairData.stream()
-            .filter(data -> lastSentSignalManager.shouldSendEmail(
-                data.getCurrencyPair(),
-                data.getTradingSignal(),
-                data.getBuyPercentage(),
-                threshold
-            ))
+            .filter(data -> {
+                // Schritt 1: Threshold-Prüfung
+                boolean thresholdOk = lastSentSignalManager.shouldSendEmail(
+                    data.getCurrencyPair(),
+                    data.getTradingSignal(),
+                    data.getBuyPercentage(),
+                    threshold
+                );
+                if (!thresholdOk) return false;
+
+                // Schritt 2: Wichtigkeits-Filter anhand der Checkbox-Einstellungen
+                // "Alle Änderungen" überschreibt die anderen Einstellungen
+                if (config.isSendOnAllChanges()) return true;
+
+                // Bestimme Wichtigkeit des Wechsels anhand des letzten bekannten Signals
+                LastSentSignalManager.LastSentSignal lastSent =
+                    lastSentSignalManager.getLastSentSignal(data.getCurrencyPair());
+
+                // Kein vorheriges Signal → erste Email → immer senden
+                if (lastSent == null) return true;
+
+                CurrencyPairData.TradingSignal fromSignal = lastSent.getSignal();
+                CurrencyPairData.TradingSignal toSignal = data.getTradingSignal();
+
+                // CRITICAL: BUY ↔ SELL
+                boolean isCritical =
+                    (fromSignal == CurrencyPairData.TradingSignal.BUY   && toSignal == CurrencyPairData.TradingSignal.SELL) ||
+                    (fromSignal == CurrencyPairData.TradingSignal.SELL  && toSignal == CurrencyPairData.TradingSignal.BUY);
+
+                // HIGH: Wechsel über NEUTRAL (BUY/SELL ↔ NEUTRAL)
+                boolean isHigh = !isCritical && (
+                    fromSignal == CurrencyPairData.TradingSignal.NEUTRAL ||
+                    toSignal   == CurrencyPairData.TradingSignal.NEUTRAL);
+
+                if (isCritical && config.isSendOnCriticalChanges()) return true;
+                if (isHigh     && config.isSendOnHighChanges())     return true;
+
+                return false;
+            })
             .collect(Collectors.toList());
     }
     
