@@ -45,8 +45,12 @@ import javafx.util.Callback;
  * Jetzt mit Signalwechsel-Spalte für Live-Wechsel-Erkennung UND historischen Daten Features
  * ERWEITERT um E-Mail-Benachrichtigungen für Signalwechsel UND vergrößerte Abmessungen
  * 
+ * GEÄNDERT: Zwei Refresh-Modi:
+ * 1. Intervall-Refresh (Checkbox, Default: deaktiviert) - alle X Minuten
+ * 2. Täglicher FXSSI-Check (Checkbox, Default: aktiviert um 12:00 Uhr) - einmal täglich
+ * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.7 (mit erweiterten Abmessungen für bessere Balken-Sichtbarkeit)
+ * @version 1.8 (mit Intervall- und Tageszeit-Refresh)
  */
 public class MainWindowController {
     
@@ -72,19 +76,29 @@ public class MainWindowController {
     private Label lastUpdateLabel;
     private Label dataDirectoryLabel;
     private Label storageInfoLabel;
-    private Label emailStatusLabel; // NEU: E-Mail-Status
+    private Label emailStatusLabel;
     private Button refreshButton;
     private Button historicalDataButton;
     private Button debugButton;
-    private Button emailConfigButton; // NEU: E-Mail-Konfigurations-Button
+    private Button emailConfigButton;
+    
+    // NEU: Intervall-Refresh Steuerelemente
+    private CheckBox intervalRefreshCheckBox;
     private Spinner<Integer> refreshIntervalSpinner;
-    private CheckBox autoRefreshCheckBox;
+    
+    // NEU: Täglicher Refresh Steuerelemente
+    private CheckBox dailyRefreshCheckBox;
+    private Spinner<Integer> dailyHourSpinner;
+    private Spinner<Integer> dailyMinuteSpinner;
+    
+    // NEU: Refresh-Status-Label
+    private Label refreshStatusLabel;
     
     // Services
     private DataRefreshManager refreshManager;
     private GuiDataService dataService;
-    private EmailConfig emailConfig; // NEU: E-Mail-Konfiguration
-    private EmailService emailService; // NEU: E-Mail-Service
+    private EmailConfig emailConfig;
+    private EmailService emailService;
     private String dataDirectory;
     
     /**
@@ -101,7 +115,7 @@ public class MainWindowController {
     public MainWindowController(String dataDirectory) {
         this.dataDirectory = validateDataDirectory(dataDirectory);
         LOGGER.info("MainWindowController erstellt mit Datenverzeichnis: " + this.dataDirectory);
-        LOGGER.info("Signalwechsel-Erkennung + Historische Daten + E-Mail-Benachrichtigungen + ERWEITERTE ABMESSUNGEN aktiviert");
+        LOGGER.info("Refresh-Modi: Intervall (Default: aus) + Täglicher Check (Default: 12:00 Uhr)");
     }
     
     /**
@@ -110,7 +124,7 @@ public class MainWindowController {
     public Scene createMainWindow(Stage primaryStage) {
         this.stage = primaryStage;
         
-        LOGGER.info("Erstelle Hauptfenster mit Signalwechsel + Historischen Daten + E-Mail Features + ERWEITERTEN ABMESSUNGEN...");
+        LOGGER.info("Erstelle Hauptfenster mit Intervall- und Tageszeit-Refresh...");
         LOGGER.info("Datenverzeichnis: " + dataDirectory);
         
         // Initialisiere Datenstrukturen
@@ -118,7 +132,7 @@ public class MainWindowController {
         dataService = new GuiDataService(dataDirectory);
         refreshManager = new DataRefreshManager(this::refreshData);
         
-        // NEU: Initialisiere E-Mail-Services
+        // Initialisiere E-Mail-Services
         initializeEmailServices();
         
         // Erstelle Root-Layout
@@ -135,28 +149,25 @@ public class MainWindowController {
         root.setCenter(centerArea);
         root.setBottom(bottomArea);
         
-        // *** ERWEITERT: Scene mit 30% größeren Abmessungen (von 1700x800 auf 2210x1040) ***
-        scene = new Scene(root, 2450, 1040); // Zusätzliche 240px Breite für Chart-Spalten
-     
+        scene = new Scene(root, 2450, 1040);
+        
         // Lade CSS (falls vorhanden)
         loadStylesheets();
         
-        LOGGER.info("Hauptfenster erfolgreich erstellt (2450x1040) - ERWEITERTE ANSICHT mit MINI-CHARTS (7T/30T) für optimale Signalverlauf-Sichtbarkeit");
-       return scene;
+        LOGGER.info("Hauptfenster erfolgreich erstellt (2450x1040)");
+        return scene;
     }
     
     /**
-     * NEU: Initialisiert die E-Mail-Services
+     * Initialisiert die E-Mail-Services
      */
     private void initializeEmailServices() {
         try {
             LOGGER.info("Initialisiere E-Mail-Services...");
             
-            // Erstelle E-Mail-Konfiguration
             emailConfig = new EmailConfig(dataDirectory);
             emailConfig.loadConfig();
             
-            // Erstelle E-Mail-Service
             emailService = new EmailService(emailConfig);
             
             LOGGER.info("E-Mail-Services initialisiert - Status: " + 
@@ -165,7 +176,6 @@ public class MainWindowController {
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Fehler beim Initialisieren der E-Mail-Services: " + e.getMessage(), e);
             
-            // Fallback: Deaktivierte E-Mail-Konfiguration
             emailConfig = new EmailConfig(dataDirectory);
             emailService = new EmailService(emailConfig);
         }
@@ -177,13 +187,8 @@ public class MainWindowController {
     private VBox createTopArea() {
         VBox topArea = new VBox();
         
-        // Titel-Bereich
         HBox titleBar = createTitleBar();
-        
-        // Toolbar
         HBox toolbar = createToolbar();
-        
-        // Separator
         Separator separator = new Separator();
         
         topArea.getChildren().addAll(titleBar, toolbar, separator);
@@ -199,7 +204,7 @@ public class MainWindowController {
         titleBar.setPadding(new Insets(10, 20, 10, 20));
         titleBar.getStyleClass().add("title-bar");
         
-        Label titleLabel = new Label("FXSSI Live Sentiment Monitor mit Signalwechsel + E-Mail-Benachrichtigungen + ERWEITERTE ANSICHT");
+        Label titleLabel = new Label("FXSSI Live Sentiment Monitor mit Signalwechsel + E-Mail-Benachrichtigungen");
         titleLabel.setFont(Font.font("System", FontWeight.BOLD, 22));
         titleLabel.getStyleClass().add("title-label");
         
@@ -208,15 +213,21 @@ public class MainWindowController {
     }
     
     /**
-     * Erstellt die Toolbar mit Steuerelementen + E-Mail-Konfigurations-Button
+     * Erstellt die Toolbar mit Steuerelementen
+     * GEÄNDERT: Zwei-Zeilen-Layout für Intervall-Refresh und Täglichen-Refresh
+     * - Zeile 1: Buttons + Intervall-Refresh (Checkbox + Spinner), Default: DEAKTIVIERT
+     * - Zeile 2: Täglicher Refresh (Checkbox + Uhrzeit-Spinner), Default: AKTIVIERT 12:00
      */
     private HBox createToolbar() {
-        HBox toolbar = new HBox(15);
-        toolbar.setAlignment(Pos.CENTER_LEFT);
-        toolbar.setPadding(new Insets(10, 20, 10, 20));
-        toolbar.getStyleClass().add("toolbar");
+        VBox toolbarContent = new VBox(5);
+        toolbarContent.setPadding(new Insets(10, 20, 10, 20));
+        toolbarContent.getStyleClass().add("toolbar");
         
-        // Refresh-Button (mit Hinweis auf Signalwechsel-Erkennung)
+        // === ZEILE 1: Buttons + Intervall-Refresh ===
+        HBox row1 = new HBox(15);
+        row1.setAlignment(Pos.CENTER_LEFT);
+        
+        // Refresh-Button
         refreshButton = new Button("🔄 Refresh + Signalwechsel-Check");
         refreshButton.setFont(Font.font(12));
         refreshButton.getStyleClass().add("refresh-button");
@@ -228,13 +239,13 @@ public class MainWindowController {
         historicalDataButton.getStyleClass().add("historical-data-button");
         historicalDataButton.setOnAction(event -> showHistoricalDataForSelectedPair());
         
-        // *** NEU: E-Mail-Konfigurations-Button ***
+        // E-Mail-Konfigurations-Button
         emailConfigButton = new Button("📧 E-Mail-Konfiguration");
         emailConfigButton.setFont(Font.font(12));
         emailConfigButton.getStyleClass().add("email-config-button");
         emailConfigButton.setOnAction(event -> openEmailConfiguration());
         
-        // Debug Button (temporär)
+        // Debug Button
         debugButton = new Button("🔧 Debug CSV");
         debugButton.setFont(Font.font(10));
         debugButton.getStyleClass().add("debug-button");
@@ -244,82 +255,199 @@ public class MainWindowController {
         Separator separator1 = new Separator();
         separator1.setOrientation(javafx.geometry.Orientation.VERTICAL);
         
-        // Auto-Refresh Label
-        Label autoRefreshLabel = new Label("Auto-Refresh:");
-        autoRefreshLabel.setFont(Font.font(12));
-        autoRefreshLabel.getStyleClass().add("toolbar-label");
-        
-        // Auto-Refresh CheckBox
-        autoRefreshCheckBox = new CheckBox("Aktiviert");
-        autoRefreshCheckBox.setFont(Font.font(12));
-        autoRefreshCheckBox.setSelected(true);
-        autoRefreshCheckBox.getStyleClass().add("auto-refresh-checkbox");
-        autoRefreshCheckBox.setOnAction(event -> {
-            if (autoRefreshCheckBox.isSelected()) {
+        // --- Intervall-Refresh (Default: DEAKTIVIERT) ---
+        intervalRefreshCheckBox = new CheckBox("Intervall-Refresh:");
+        intervalRefreshCheckBox.setFont(Font.font(12));
+        intervalRefreshCheckBox.setSelected(false); // DEFAULT: Deaktiviert
+        intervalRefreshCheckBox.getStyleClass().add("interval-refresh-checkbox");
+        intervalRefreshCheckBox.setOnAction(event -> {
+            if (intervalRefreshCheckBox.isSelected()) {
                 refreshManager.startAutoRefresh(refreshIntervalSpinner.getValue());
-                LOGGER.info("Auto-Refresh aktiviert - Signalwechsel werden automatisch erkannt + E-Mails versendet");
+                LOGGER.info("Intervall-Refresh aktiviert: alle " + refreshIntervalSpinner.getValue() + " Minuten");
             } else {
                 refreshManager.stopAutoRefresh();
-                LOGGER.info("Auto-Refresh deaktiviert");
+                LOGGER.info("Intervall-Refresh deaktiviert");
             }
+            updateRefreshStatus();
         });
-        
-        // Intervall Label
-        Label intervalLabel = new Label("Intervall (Min.):");
-        intervalLabel.setFont(Font.font(12));
-        intervalLabel.getStyleClass().add("toolbar-label");
         
         // Intervall Spinner
         refreshIntervalSpinner = new Spinner<>(1, 60, 15);
         refreshIntervalSpinner.setPrefWidth(80);
         refreshIntervalSpinner.getStyleClass().add("interval-spinner");
+        refreshIntervalSpinner.setDisable(true); // Default deaktiviert weil Checkbox aus
         refreshIntervalSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
-            if (autoRefreshCheckBox.isSelected()) {
+            if (intervalRefreshCheckBox.isSelected()) {
                 refreshManager.updateRefreshInterval(newVal);
-                LOGGER.info("Refresh-Intervall geändert auf " + newVal + " Minuten (mit Signalwechsel + E-Mail)");
+                LOGGER.info("Intervall geändert auf " + newVal + " Minuten");
             }
+            updateRefreshStatus();
         });
         
-        // Platzhalter für rechte Seite
-        Region spacer = new Region();
-        HBox.setHgrow(spacer, Priority.ALWAYS);
+        // Spinner aktivieren/deaktivieren basierend auf Checkbox
+        intervalRefreshCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            refreshIntervalSpinner.setDisable(!newVal);
+        });
         
-        // Status-Bereich
+        Label minLabel = new Label("Min.");
+        minLabel.setFont(Font.font(11));
+        
+        // Platzhalter
+        Region spacer1 = new Region();
+        HBox.setHgrow(spacer1, Priority.ALWAYS);
+        
+        // Status-Bereich (rechte Seite)
         VBox statusArea = createStatusArea();
         
-        // *** ERWEITERTE Toolbar mit E-Mail-Button ***
-        toolbar.getChildren().addAll(
-            refreshButton, historicalDataButton, emailConfigButton, debugButton, separator1, 
-            autoRefreshLabel, autoRefreshCheckBox, intervalLabel, refreshIntervalSpinner, 
-            spacer, statusArea
+        row1.getChildren().addAll(
+            refreshButton, historicalDataButton, emailConfigButton, debugButton,
+            separator1,
+            intervalRefreshCheckBox, refreshIntervalSpinner, minLabel,
+            spacer1, statusArea
         );
+        
+        // === ZEILE 2: Täglicher Refresh (Default: AKTIVIERT 12:00 Uhr) ===
+        HBox row2 = new HBox(15);
+        row2.setAlignment(Pos.CENTER_LEFT);
+        
+        // Täglicher Refresh Checkbox
+        dailyRefreshCheckBox = new CheckBox("Täglicher FXSSI-Check um:");
+        dailyRefreshCheckBox.setFont(Font.font(12));
+        dailyRefreshCheckBox.setSelected(true); // DEFAULT: Aktiviert
+        dailyRefreshCheckBox.getStyleClass().add("daily-refresh-checkbox");
+        dailyRefreshCheckBox.setOnAction(event -> {
+            if (dailyRefreshCheckBox.isSelected()) {
+                refreshManager.startDailyRefresh(dailyHourSpinner.getValue(), dailyMinuteSpinner.getValue());
+                LOGGER.info(String.format("Täglicher Refresh aktiviert: %02d:%02d Uhr",
+                    dailyHourSpinner.getValue(), dailyMinuteSpinner.getValue()));
+            } else {
+                refreshManager.stopDailyRefresh();
+                LOGGER.info("Täglicher Refresh deaktiviert");
+            }
+            updateRefreshStatus();
+        });
+        
+        // Stunden-Spinner (0-23), Default 12
+        dailyHourSpinner = new Spinner<>(0, 23, 12);
+        dailyHourSpinner.setPrefWidth(70);
+        dailyHourSpinner.setEditable(true);
+        dailyHourSpinner.getStyleClass().add("daily-hour-spinner");
+        dailyHourSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (dailyRefreshCheckBox.isSelected()) {
+                refreshManager.updateDailyRefreshTime(newVal, dailyMinuteSpinner.getValue());
+                LOGGER.info(String.format("Tägliche Refresh-Zeit geändert auf %02d:%02d",
+                    newVal, dailyMinuteSpinner.getValue()));
+            }
+            updateRefreshStatus();
+        });
+        
+        Label colonLabel = new Label(":");
+        colonLabel.setFont(Font.font("System", FontWeight.BOLD, 14));
+        
+        // Minuten-Spinner (0-59), Default 0
+        dailyMinuteSpinner = new Spinner<>(0, 59, 0);
+        dailyMinuteSpinner.setPrefWidth(70);
+        dailyMinuteSpinner.setEditable(true);
+        dailyMinuteSpinner.getStyleClass().add("daily-minute-spinner");
+        dailyMinuteSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
+            if (dailyRefreshCheckBox.isSelected()) {
+                refreshManager.updateDailyRefreshTime(dailyHourSpinner.getValue(), newVal);
+                LOGGER.info(String.format("Tägliche Refresh-Zeit geändert auf %02d:%02d",
+                    dailyHourSpinner.getValue(), newVal));
+            }
+            updateRefreshStatus();
+        });
+        
+        Label uhrLabel = new Label("Uhr");
+        uhrLabel.setFont(Font.font(11));
+        
+        // Spinner aktivieren/deaktivieren basierend auf Checkbox
+        dailyRefreshCheckBox.selectedProperty().addListener((obs, oldVal, newVal) -> {
+            dailyHourSpinner.setDisable(!newVal);
+            dailyMinuteSpinner.setDisable(!newVal);
+        });
+        
+        // Separator
+        Separator separator2 = new Separator();
+        separator2.setOrientation(javafx.geometry.Orientation.VERTICAL);
+        
+        // Refresh-Status-Label
+        refreshStatusLabel = new Label("Täglicher Check: 12:00 Uhr aktiv");
+        refreshStatusLabel.setFont(Font.font(10));
+        refreshStatusLabel.setStyle("-fx-text-fill: #2E86AB;");
+        
+        row2.getChildren().addAll(
+            dailyRefreshCheckBox, dailyHourSpinner, colonLabel, dailyMinuteSpinner, uhrLabel,
+            separator2, refreshStatusLabel
+        );
+        
+        toolbarContent.getChildren().addAll(row1, row2);
+        
+        // Wrapping HBox für Kompatibilität mit dem BorderPane-Layout
+        HBox toolbar = new HBox();
+        toolbar.getChildren().add(toolbarContent);
+        HBox.setHgrow(toolbarContent, Priority.ALWAYS);
         
         return toolbar;
     }
     
     /**
-     * *** NEU: Öffnet das E-Mail-Konfigurationsfenster ***
+     * NEU: Aktualisiert das Refresh-Status-Label basierend auf den aktiven Modi
+     */
+    private void updateRefreshStatus() {
+        if (refreshStatusLabel == null) return;
+        
+        Platform.runLater(() -> {
+            StringBuilder status = new StringBuilder();
+            
+            boolean intervalActive = intervalRefreshCheckBox != null && intervalRefreshCheckBox.isSelected();
+            boolean dailyActive = dailyRefreshCheckBox != null && dailyRefreshCheckBox.isSelected();
+            
+            if (intervalActive && dailyActive) {
+                status.append(String.format("✅ Intervall: alle %d Min. + Täglicher Check: %02d:%02d Uhr",
+                    refreshIntervalSpinner.getValue(),
+                    dailyHourSpinner.getValue(),
+                    dailyMinuteSpinner.getValue()));
+                refreshStatusLabel.setStyle("-fx-text-fill: #2E7D32; -fx-font-weight: bold;");
+                
+            } else if (intervalActive) {
+                status.append(String.format("✅ Intervall-Refresh: alle %d Min.",
+                    refreshIntervalSpinner.getValue()));
+                refreshStatusLabel.setStyle("-fx-text-fill: #1565C0;");
+                
+            } else if (dailyActive) {
+                status.append(String.format("✅ Täglicher Check: %02d:%02d Uhr",
+                    dailyHourSpinner.getValue(),
+                    dailyMinuteSpinner.getValue()));
+                refreshStatusLabel.setStyle("-fx-text-fill: #2E86AB;");
+                
+            } else {
+                status.append("⚠️ Kein automatischer Refresh aktiv - nur manuell");
+                refreshStatusLabel.setStyle("-fx-text-fill: #E65100; -fx-font-weight: bold;");
+            }
+            
+            refreshStatusLabel.setText(status.toString());
+        });
+    }
+    
+    /**
+     * Öffnet das E-Mail-Konfigurationsfenster
      */
     private void openEmailConfiguration() {
         try {
             LOGGER.info("Öffne E-Mail-Konfigurationsfenster mit MetaTrader-Integration...");
             
-            // Erstelle das E-Mail-Konfigurationsfenster
             EmailConfigWindow emailConfigWindow = new EmailConfigWindow(stage, dataDirectory);
             
-            // NEU: Definiere Callback für MetaTrader-Konfiguration
             emailConfigWindow.setMetaTraderConfigurationCallback((enabled, directory) -> {
                 try {
                     if (enabled && directory != null && !directory.trim().isEmpty()) {
-                        // Aktiviere MetaTrader-Synchronisation
                         dataService.getSignalChangeHistoryManager().setMetatraderFileDir(directory.trim());
                         LOGGER.info("MetaTrader-Synchronisation aktiviert: " + directory);
                         
-                        // Aktualisiere GUI-Status
                         Platform.runLater(() -> {
                             updateStatus("MetaTrader-Synchronisation aktiviert: " + directory);
                             
-                            // Optional: Zeige Bestätigung
                             Alert alert = new Alert(Alert.AlertType.INFORMATION);
                             alert.setTitle("MetaTrader-Synchronisation");
                             alert.setHeaderText("MetaTrader-Datei-Synchronisation aktiviert");
@@ -329,11 +457,9 @@ public class MainWindowController {
                         });
                         
                     } else {
-                        // Deaktiviere MetaTrader-Synchronisation
                         dataService.getSignalChangeHistoryManager().setMetatraderFileDir(null);
                         LOGGER.info("MetaTrader-Synchronisation deaktiviert");
                         
-                        // Aktualisiere GUI-Status
                         Platform.runLater(() -> {
                             updateStatus("MetaTrader-Synchronisation deaktiviert");
                         });
@@ -346,11 +472,7 @@ public class MainWindowController {
                         Alert alert = new Alert(Alert.AlertType.WARNING);
                         alert.setTitle("MetaTrader-Verzeichnis ungültig");
                         alert.setHeaderText("MetaTrader-Synchronisation konnte nicht aktiviert werden");
-                        alert.setContentText("Das angegebene Verzeichnis ist ungültig:\n\n" + e.getMessage() + 
-                            "\n\nBitte überprüfen Sie:\n" +
-                            "• Verzeichnis existiert\n" +
-                            "• Verzeichnis ist beschreibbar\n" +
-                            "• Korrekte Pfadangabe");
+                        alert.setContentText("Das angegebene Verzeichnis ist ungültig:\n\n" + e.getMessage());
                         alert.showAndWait();
                         
                         updateStatus("MetaTrader-Konfiguration fehlgeschlagen: " + e.getMessage());
@@ -363,11 +485,7 @@ public class MainWindowController {
                         Alert alert = new Alert(Alert.AlertType.ERROR);
                         alert.setTitle("MetaTrader-Konfigurationsfehler");
                         alert.setHeaderText("MetaTrader-Synchronisation konnte nicht konfiguriert werden");
-                        alert.setContentText("Unerwarteter Fehler: " + e.getMessage() + 
-                            "\n\nMögliche Ursachen:\n" +
-                            "• Dateisystem-Berechtigungen\n" +
-                            "• Netzwerk-Laufwerk nicht verfügbar\n" +
-                            "• System-Ressourcen");
+                        alert.setContentText("Unerwarteter Fehler: " + e.getMessage());
                         alert.showAndWait();
                         
                         updateStatus("MetaTrader-Konfiguration fehlgeschlagen: " + e.getMessage());
@@ -375,22 +493,18 @@ public class MainWindowController {
                 }
             });
             
-            // Lade aktuelle MetaTrader-Konfiguration in das Fenster (falls vorhanden)
             try {
                 String currentMetaTraderDir = dataService.getSignalChangeHistoryManager().getMetatraderFileDir();
                 boolean isSyncEnabled = dataService.getSignalChangeHistoryManager().isMetatraderSyncEnabled();
                 
                 if (isSyncEnabled && currentMetaTraderDir != null) {
                     LOGGER.info("Lade bestehende MetaTrader-Konfiguration: " + currentMetaTraderDir);
-                    // Hier könnte man das EmailConfigWindow mit den aktuellen Werten vorbelegen
-                    // Das ist optional, da die Konfiguration beim Speichern überschrieben wird
                 }
                 
             } catch (Exception e) {
                 LOGGER.fine("Konnte aktuelle MetaTrader-Konfiguration nicht laden: " + e.getMessage());
             }
             
-            // Zeige das Konfigurationsfenster
             emailConfigWindow.show();
             
             LOGGER.info("E-Mail-Konfigurationsfenster mit MetaTrader-Integration geöffnet");
@@ -401,17 +515,13 @@ public class MainWindowController {
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setTitle("Fehler");
             alert.setHeaderText("E-Mail-Konfiguration konnte nicht geöffnet werden");
-            alert.setContentText("Fehler: " + e.getMessage() + 
-                "\n\nMögliche Ursachen:" +
-                "\n• Konfigurationsverzeichnis nicht zugänglich" +
-                "\n• E-Mail-Services nicht initialisiert" +
-                "\n• MetaTrader-Integration nicht verfügbar");
+            alert.setContentText("Fehler: " + e.getMessage());
             alert.showAndWait();
         }
     }
     
     /**
-     * Erstellt den Status-Bereich mit erweiterten Informationen inkl. E-Mail-Status
+     * Erstellt den Status-Bereich
      */
     private VBox createStatusArea() {
         VBox statusArea = new VBox();
@@ -425,17 +535,14 @@ public class MainWindowController {
         lastUpdateLabel.setFont(Font.font(10));
         lastUpdateLabel.getStyleClass().add("last-update-label");
         
-        // Datenverzeichnis-Anzeige
         dataDirectoryLabel = new Label("Datenverzeichnis: " + dataDirectory);
         dataDirectoryLabel.setFont(Font.font(9));
         dataDirectoryLabel.getStyleClass().add("data-directory-label");
         
-        // Speicher-Info-Label
-        storageInfoLabel = new Label("Speicherung: Tägliche + Währungspaar + Signalwechsel + Historische Daten + ERWEITERTE ANSICHT");
+        storageInfoLabel = new Label("Speicherung: Tägliche + Währungspaar + Signalwechsel");
         storageInfoLabel.setFont(Font.font(9));
         storageInfoLabel.getStyleClass().add("storage-info-label");
         
-        // *** NEU: E-Mail-Status-Label ***
         emailStatusLabel = new Label("E-Mail: " + (emailConfig != null && emailConfig.isEmailEnabled() ? "✅ Aktiviert" : "❌ Deaktiviert"));
         emailStatusLabel.setFont(Font.font(9));
         emailStatusLabel.getStyleClass().add("email-status-label");
@@ -451,10 +558,8 @@ public class MainWindowController {
         VBox centerArea = new VBox(10);
         centerArea.setPadding(new Insets(20, 20, 20, 20));
         
-        // Header
         HBox headerArea = createTableHeader();
         
-        // Tabelle
         currencyTable = createCurrencyTable();
         VBox.setVgrow(currencyTable, Priority.ALWAYS);
         
@@ -463,7 +568,7 @@ public class MainWindowController {
     }
     
     /**
-     * Erstellt den Tabellen-Header mit Hinweis auf E-Mail-Benachrichtigungen
+     * Erstellt den Tabellen-Header
      */
     private HBox createTableHeader() {
         HBox headerArea = new HBox(10);
@@ -491,7 +596,6 @@ public class MainWindowController {
         TableView<CurrencyPairTableRow> table = new TableView<>();
         table.getStyleClass().add("currency-table");
         
-        // Aktiviere Selektion für historische Daten
         table.getSelectionModel().setSelectionMode(javafx.scene.control.SelectionMode.SINGLE);
         
         // Symbol-Spalte
@@ -502,12 +606,12 @@ public class MainWindowController {
         symbolColumn.setResizable(false);
         symbolColumn.getStyleClass().add("symbol-column");
         
-        // VERGRÖSSERTE RATIO-SPALTE: Von 380 auf 520 für breitere Balken
+        // Ratio-Spalte
         ratioColumn = new TableColumn<>("Ratio");
         ratioColumn.setCellValueFactory(cellData -> 
             new javafx.beans.property.SimpleObjectProperty<>(cellData.getValue()));
         ratioColumn.setCellFactory(new RatioBarCellFactory());
-        ratioColumn.setPrefWidth(450); // Angepasst an CONTAINER_WIDTH = 800 + Padding
+        ratioColumn.setPrefWidth(450);
         ratioColumn.getStyleClass().add("ratio-column");
         
         // Signal-Spalte
@@ -528,7 +632,7 @@ public class MainWindowController {
         changeColumn.setResizable(false);
         changeColumn.getStyleClass().add("change-column");
         
-        // *** NEU: 7-Tage Chart-Spalte ***
+        // 7-Tage Chart-Spalte
         TableColumn<CurrencyPairTableRow, CurrencyPairTableRow> chart7DaysColumn = 
             new TableColumn<>("📊 7T");
         chart7DaysColumn.setCellValueFactory(cellData -> 
@@ -541,7 +645,7 @@ public class MainWindowController {
         chart7DaysColumn.setSortable(false);
         chart7DaysColumn.getStyleClass().add("chart-7days-column");
         
-        // *** NEU: 30-Tage Chart-Spalte ***
+        // 30-Tage Chart-Spalte
         TableColumn<CurrencyPairTableRow, CurrencyPairTableRow> chart30DaysColumn = 
             new TableColumn<>("📈 30T");
         chart30DaysColumn.setCellValueFactory(cellData -> 
@@ -554,19 +658,16 @@ public class MainWindowController {
         chart30DaysColumn.setSortable(false);
         chart30DaysColumn.getStyleClass().add("chart-30days-column");
         
-        // *** ERWEITERT: Spalten zur Tabelle hinzufügen (inklusive neue Chart-Spalten) ***
         table.getColumns().addAll(symbolColumn, ratioColumn, signalColumn, changeColumn, 
                                   chart7DaysColumn, chart30DaysColumn);
         
-        // Tabellen-Konfiguration
         table.setItems(tableData);
         
-        // Row-Factory mit Selektion für historische Daten
+        // Row-Factory mit Doppelklick für historische Daten
         table.setRowFactory(tv -> {
             TableRow<CurrencyPairTableRow> row = new TableRow<>();
             row.getStyleClass().add("currency-table-row");
             
-            // Doppelklick öffnet historische Daten
             row.setOnMouseClicked(event -> {
                 if (event.getClickCount() == 2 && !row.isEmpty()) {
                     showHistoricalDataForPair(row.getItem().getCurrencyPair());
@@ -580,12 +681,15 @@ public class MainWindowController {
         VBox placeholder = createTablePlaceholder();
         table.setPlaceholder(placeholder);
         
-        // Spaltengrößen-Policy
         table.setColumnResizePolicy(TableView.UNCONSTRAINED_RESIZE_POLICY);
         
         LOGGER.info("Tabelle erstellt mit 6 Spalten: Symbol + Ratio + Signal + Wechsel + 7T-Chart + 30T-Chart");
         return table;
     }
+    
+    /**
+     * Cell Factory für 7-Tage Signalverlauf-Charts
+     */
     private class SignalChart7DaysCellFactory implements Callback<TableColumn<CurrencyPairTableRow, CurrencyPairTableRow>, TableCell<CurrencyPairTableRow, CurrencyPairTableRow>> {
         @Override
         public TableCell<CurrencyPairTableRow, CurrencyPairTableRow> call(TableColumn<CurrencyPairTableRow, CurrencyPairTableRow> param) {
@@ -593,7 +697,6 @@ public class MainWindowController {
                 return new SignalHistoryChartTableCell(7, dataService);
             } catch (Exception e) {
                 LOGGER.warning("Fehler beim Erstellen der 7-Tage Chart-Zelle: " + e.getMessage());
-                // Fallback: Leere Zelle mit Fehlermeldung
                 return new TableCell<CurrencyPairTableRow, CurrencyPairTableRow>() {
                     @Override
                     protected void updateItem(CurrencyPairTableRow item, boolean empty) {
@@ -610,8 +713,7 @@ public class MainWindowController {
     }
 
     /**
-     * *** NEU: Cell Factory für 30-Tage Signalverlauf-Charts ***
-     * Diese Klasse muss als innere Klasse in MainWindowController eingefügt werden
+     * Cell Factory für 30-Tage Signalverlauf-Charts
      */
     private class SignalChart30DaysCellFactory implements Callback<TableColumn<CurrencyPairTableRow, CurrencyPairTableRow>, TableCell<CurrencyPairTableRow, CurrencyPairTableRow>> {
         @Override
@@ -620,7 +722,6 @@ public class MainWindowController {
                 return new SignalHistoryChartTableCell(30, dataService);
             } catch (Exception e) {
                 LOGGER.warning("Fehler beim Erstellen der 30-Tage Chart-Zelle: " + e.getMessage());
-                // Fallback: Leere Zelle mit Fehlermeldung
                 return new TableCell<CurrencyPairTableRow, CurrencyPairTableRow>() {
                     @Override
                     protected void updateItem(CurrencyPairTableRow item, boolean empty) {
@@ -635,8 +736,9 @@ public class MainWindowController {
             }
         }
     }
+    
     /**
-     * Erstellt den Placeholder für leere Tabelle mit allen Features inkl. E-Mail
+     * Erstellt den Placeholder für leere Tabelle
      */
     private VBox createTablePlaceholder() {
         VBox placeholder = new VBox(10);
@@ -666,31 +768,28 @@ public class MainWindowController {
         historicalHint.setFont(Font.font(10));
         historicalHint.getStyleClass().add("placeholder-hint-small");
         
-        // NEU: E-Mail-Hinweis
         Label emailHint = new Label("📧 E-Mail-Benachrichtigungen: Konfiguration über E-Mail-Button");
         emailHint.setFont(Font.font(10));
         emailHint.getStyleClass().add("placeholder-hint-small");
         
-        // NEU: Chart-Hinweis
         Label chartHint = new Label("📈 MINI-CHARTS: 7T/30T Spalten zeigen Signalverläufe mit Wechselpunkten");
         chartHint.setFont(Font.font(10));
         chartHint.getStyleClass().add("placeholder-hint-small");
         chartHint.setStyle("-fx-text-fill: #2E86AB; -fx-font-weight: bold;");
         
-        // NEU: Erweiterte Ansicht Hinweis
-        Label extendedHint = new Label("🔍 ERWEITERTE ANSICHT: 50% längere Balken, 30% größeres Fenster + Mini-Charts");
-        extendedHint.setFont(Font.font(10));
-        extendedHint.getStyleClass().add("placeholder-hint-small");
-        extendedHint.setStyle("-fx-text-fill: #2E86AB; -fx-font-weight: bold;");
+        Label refreshHint = new Label("⏰ Refresh-Modi: Intervall (konfigurierbar) oder Täglicher Check (Default 12:00 Uhr)");
+        refreshHint.setFont(Font.font(10));
+        refreshHint.getStyleClass().add("placeholder-hint-small");
+        refreshHint.setStyle("-fx-text-fill: #2E86AB; -fx-font-weight: bold;");
         
         placeholder.getChildren().addAll(placeholderText, placeholderHint, dataDirectoryHint, 
-                                       storageHint, changeHint, historicalHint, emailHint, 
-                                       chartHint, extendedHint);
+                                       storageHint, changeHint, historicalHint, emailHint,
+                                       chartHint, refreshHint);
         return placeholder;
     }
     
     /**
-     * Erstellt den unteren Bereich (Status-Leiste) mit E-Mail-Informationen
+     * Erstellt den unteren Bereich (Status-Leiste)
      */
     private HBox createBottomArea() {
         HBox bottomArea = new HBox(20);
@@ -698,7 +797,7 @@ public class MainWindowController {
         bottomArea.setPadding(new Insets(5, 20, 5, 20));
         bottomArea.getStyleClass().add("status-bar");
         
-        Label appInfo = new Label("FXSSI Data Extractor v1.7");
+        Label appInfo = new Label("FXSSI Data Extractor v1.8");
         appInfo.setFont(Font.font(10));
         appInfo.getStyleClass().add("app-info");
         
@@ -727,19 +826,17 @@ public class MainWindowController {
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
         
-        Label dataSource = new Label("Live + Historische Daten von FXSSI.com + E-Mail + MINI-CHARTS + 50% längere Balken");        dataSource.setFont(Font.font(10));
+        Label dataSource = new Label("Live + Historische Daten von FXSSI.com + E-Mail + MINI-CHARTS");
+        dataSource.setFont(Font.font(10));
         dataSource.getStyleClass().add("data-source");
         
         bottomArea.getChildren().addAll(
-            appInfo, separator1, appDescription, separator2, dataDirectoryInfo, 
+            appInfo, separator1, appDescription, separator2, dataDirectoryInfo,
             separator3, storageInfo, spacer, dataSource
         );
         
         return bottomArea;
     }
-    
-    // ===== ALLE WEITEREN METHODEN BLEIBEN UNVERÄNDERT =====
-    // (Da die Änderungen nur die Größendarstellung betreffen, bleiben alle anderen Methoden identisch)
     
     /**
      * Zeigt historische Daten für das ausgewählte Währungspaar
@@ -748,7 +845,6 @@ public class MainWindowController {
         CurrencyPairTableRow selectedItem = currencyTable.getSelectionModel().getSelectedItem();
         
         if (selectedItem == null) {
-            // Keine Auswahl - zeige Hinweis
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
             alert.setTitle("Kein Währungspaar ausgewählt");
             alert.setHeaderText("Bitte wählen Sie ein Währungspaar aus");
@@ -768,7 +864,6 @@ public class MainWindowController {
         try {
             LOGGER.info("Öffne historische Daten für: " + currencyPair);
             
-            // Erstelle und zeige das historische Daten-Fenster
             HistoricalDataWindow historicalWindow = new HistoricalDataWindow(
                 stage, 
                 currencyPair, 
@@ -780,7 +875,6 @@ public class MainWindowController {
         } catch (Exception e) {
             LOGGER.severe("Fehler beim Öffnen der historischen Daten: " + e.getMessage());
             
-            // Zeige Fehlermeldung
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setTitle("Fehler");
             alert.setHeaderText("Historische Daten konnten nicht geöffnet werden");
@@ -801,10 +895,8 @@ public class MainWindowController {
         LOGGER.info("=== DEBUG: Teste historische Datenladung ===");
         
         try {
-            // Test mit verfügbaren Währungspaaren
             LOGGER.info("Datenverzeichnis: " + dataService.getDataDirectory());
             
-            // Lade verfügbare Währungspaare
             Set<String> availablePairs = dataService.getAvailableCurrencyPairs();
             LOGGER.info("Verfügbare Währungspaare: " + availablePairs);
             LOGGER.info("Anzahl verfügbare Paare: " + availablePairs.size());
@@ -816,11 +908,9 @@ public class MainWindowController {
                 return;
             }
             
-            // Teste mit erstem verfügbaren Währungspaar
             String testCurrencyPair = availablePairs.iterator().next();
             LOGGER.info("Teste mit Währungspaar: " + testCurrencyPair);
             
-            // Teste historische Datenladung
             List<CurrencyPairData> historicalData = dataService.getHistoricalDataForCurrencyPair(testCurrencyPair);
             LOGGER.info("Geladene historische Daten: " + historicalData.size() + " Einträge");
             
@@ -835,18 +925,12 @@ public class MainWindowController {
                     "✅ Historische Daten erfolgreich geladen!\n\n" +
                     "Währungspaar: " + testCurrencyPair + "\n" +
                     "Gefundene Datensätze: " + historicalData.size() + "\n" +
-                    "Verfügbare Währungspaare: " + availablePairs.size() + "\n\n" +
-                    "Das historische Daten Feature sollte jetzt funktionieren.\n\n" +
-                    "*** ERWEITERTE ANSICHT: 50% längere Balken aktiviert ***");
+                    "Verfügbare Währungspaare: " + availablePairs.size());
                 
             } else {
                 LOGGER.warning("KEINE HISTORISCHEN DATEN GELADEN für " + testCurrencyPair);
                 showDebugAlert("Keine Daten geladen", 
                     "❌ Keine historischen Daten für " + testCurrencyPair + " geladen.\n\n" +
-                    "Mögliche Ursachen:\n" +
-                    "• CSV-Datei ist leer\n" +
-                    "• Deutsches Dezimalformat (Komma statt Punkt)\n" +
-                    "• Ungültiges CSV-Format\n\n" +
                     "Prüfen Sie die Logs für Details.");
             }
             
@@ -855,8 +939,7 @@ public class MainWindowController {
             e.printStackTrace();
             
             showDebugAlert("Debug-Test Fehler", 
-                "❌ Fehler beim Debug-Test:\n\n" + e.getMessage() + 
-                "\n\nPrüfen Sie die Logs für Details.");
+                "❌ Fehler beim Debug-Test:\n\n" + e.getMessage());
         }
         
         LOGGER.info("=== DEBUG-Test abgeschlossen ===");
@@ -869,7 +952,7 @@ public class MainWindowController {
         Platform.runLater(() -> {
             Alert alert = new Alert(Alert.AlertType.INFORMATION);
             alert.setTitle("Debug: " + title);
-            alert.setHeaderText("CSV-Datenladung Debug-Test (ERWEITERTE ANSICHT)");
+            alert.setHeaderText("CSV-Datenladung Debug-Test");
             alert.setContentText(message);
             alert.showAndWait();
         });
@@ -877,6 +960,7 @@ public class MainWindowController {
     
     /**
      * Startet den Datenservice
+     * GEÄNDERT: Startet standardmäßig den täglichen Refresh statt Intervall-Refresh
      */
     public void startDataService() {
         try {
@@ -885,20 +969,36 @@ public class MainWindowController {
             // Initiale Datenladung
             refreshData();
             
-            // Starte Auto-Refresh falls aktiviert
-            if (autoRefreshCheckBox.isSelected()) {
+            // Starte Refresh basierend auf Checkbox-Zuständen
+            // Default: Intervall-Refresh ist DEAKTIVIERT
+            if (intervalRefreshCheckBox != null && intervalRefreshCheckBox.isSelected()) {
                 refreshManager.startAutoRefresh(refreshIntervalSpinner.getValue());
-                LOGGER.info("Auto-Refresh gestartet mit Signalwechsel + E-Mail-Erkennung alle " + refreshIntervalSpinner.getValue() + " Minuten (ERWEITERTE ANSICHT)");
+                LOGGER.info("Intervall-Refresh gestartet: alle " + refreshIntervalSpinner.getValue() + " Minuten");
+            }
+            
+            // Default: Täglicher Refresh ist AKTIVIERT um 12:00 Uhr
+            if (dailyRefreshCheckBox != null && dailyRefreshCheckBox.isSelected()) {
+                refreshManager.startDailyRefresh(dailyHourSpinner.getValue(), dailyMinuteSpinner.getValue());
+                LOGGER.info(String.format("Täglicher Refresh gestartet: %02d:%02d Uhr",
+                    dailyHourSpinner.getValue(), dailyMinuteSpinner.getValue()));
             }
             
             LOGGER.info("Datenservice gestartet mit Datenverzeichnis: " + dataDirectory);
-            LOGGER.info("Alle Features aktiviert: Live-Daten + Signalwechsel + Historische Daten + E-Mail-Benachrichtigungen + MINI-CHARTS (7T/30T)");
-           
+            LOGGER.info("Refresh-Modus: Intervall=" + 
+                       (intervalRefreshCheckBox != null && intervalRefreshCheckBox.isSelected() ? "aktiv" : "inaktiv") +
+                       ", Täglicher Check=" + 
+                       (dailyRefreshCheckBox != null && dailyRefreshCheckBox.isSelected() ? 
+                           String.format("aktiv (%02d:%02d)", dailyHourSpinner.getValue(), dailyMinuteSpinner.getValue()) : 
+                           "inaktiv"));
+            
             // Zeige initiale Statistiken
             updateStorageStatistics();
             
             // Update E-Mail-Status
             updateEmailStatus();
+            
+            // Update Refresh-Status
+            updateRefreshStatus();
             
         } catch (Exception e) {
             LOGGER.log(Level.SEVERE, "Fehler beim Starten des Datenservice: " + e.getMessage(), e);
@@ -907,12 +1007,11 @@ public class MainWindowController {
     }
     
     /**
-     * *** KORRIGIERT: Aktualisiert die E-Mail-Status-Anzeige mit final Variable ***
+     * Aktualisiert die E-Mail-Status-Anzeige
      */
     private void updateEmailStatus() {
         try {
             if (emailConfig != null) {
-                // *** FIX: Erstelle finale statusText Variable ***
                 final String statusText;
                 if (emailConfig.isEmailEnabled()) {
                     statusText = "E-Mail: ✅ Aktiviert (" + emailConfig.getToEmail() + ")";
@@ -921,7 +1020,6 @@ public class MainWindowController {
                 }
                 
                 Platform.runLater(() -> {
-                    // *** FIX: Null-Check hinzugefügt ***
                     if (emailStatusLabel != null) {
                         emailStatusLabel.setText(statusText);
                     }
@@ -936,11 +1034,10 @@ public class MainWindowController {
     
     /**
      * Aktualisiert die Daten in der Tabelle mit Signalwechsel-Erkennung UND E-Mail-Versendung
-     * WICHTIG: Diese Methode wird bei JEDEM Refresh (manuell + automatisch) aufgerufen
      */
     private void refreshData() {
         Platform.runLater(() -> {
-            updateStatus("Lade Daten und erkenne Signalwechsel... (ERWEITERTE ANSICHT)");
+            updateStatus("Lade Daten und erkenne Signalwechsel...");
             refreshButton.setDisable(true);
             if (historicalDataButton != null) historicalDataButton.setDisable(true);
             if (emailConfigButton != null) emailConfigButton.setDisable(true);
@@ -949,39 +1046,31 @@ public class MainWindowController {
         // Lade Daten asynchron
         new Thread(() -> {
             try {
-                // WICHTIG: Diese Methode garantiert Signalwechsel-Erkennung
-                // E-Mail-Versand erfolgt automatisch über SignalChangeHistoryManager (Threshold-System)
                 List<CurrencyPairData> data = dataService.forceDataRefresh();
 
-                // ✅ NEU: DIREKTE MetaTrader-Synchronisation nach jedem Refresh
+                // MetaTrader-Synchronisation nach jedem Refresh
                 syncMetaTraderAfterRefresh();
                 
                 Platform.runLater(() -> {
                     updateTableData(data);
-                    updateStatus("Daten aktualisiert (" + data.size() + " Währungspaare) - Signalwechsel erkannt + E-Mail geprüft + MetaTrader sync (ERWEITERTE ANSICHT)");
+                    updateStatus("Daten aktualisiert (" + data.size() + " Währungspaare) - Signalwechsel erkannt + E-Mail geprüft");
                     
-                    // *** FIX: Null-Check für lastUpdateLabel hinzugefügt ***
                     if (lastUpdateLabel != null) {
                         lastUpdateLabel.setText("Letzte Aktualisierung: " + 
-                            java.time.LocalTime.now().format(TIME_FORMATTER) + " (mit Signalwechsel + E-Mail-Check + MetaTrader-Sync + ERWEITERTE BALKEN)");
+                            java.time.LocalTime.now().format(TIME_FORMATTER));
                     }
                     
                     refreshButton.setDisable(false);
                     if (historicalDataButton != null) historicalDataButton.setDisable(false);
                     if (emailConfigButton != null) emailConfigButton.setDisable(false);
                     
-                    // Aktualisiere Speicher-Statistiken
                     updateStorageStatistics();
-                    
-                    // Aktualisiere E-Mail-Status
                     updateEmailStatus();
-                    
-                    // Aktualisiere Signalwechsel-Zellen
                     refreshSignalChangeCells();
                     refreshChartColumns();
                 });
                 
-                LOGGER.info("GUI-Refresh abgeschlossen: " + data.size() + " Datensätze + Signalwechsel + E-Mail-Check + MetaTrader-Sync (ERWEITERTE ANSICHT)");
+                LOGGER.info("GUI-Refresh abgeschlossen: " + data.size() + " Datensätze");
                 
             } catch (Exception e) {
                 LOGGER.log(Level.WARNING, "Fehler beim Laden der Daten: " + e.getMessage(), e);
@@ -995,13 +1084,15 @@ public class MainWindowController {
             }
         }).start();
     }
+    
+    /**
+     * Refresht Chart-Spalten
+     */
     private void refreshChartColumns() {
         try {
             Platform.runLater(() -> {
                 if (currencyTable != null) {
-                    // Force refresh der gesamten Tabelle um Chart-Updates zu triggern
                     currencyTable.refresh();
-                    
                     LOGGER.fine("Chart-Spalten refreshed");
                 }
             });
@@ -1009,18 +1100,17 @@ public class MainWindowController {
             LOGGER.fine("Fehler beim Refreshen der Chart-Spalten: " + e.getMessage());
         }
     }
+    
     /**
-     * *** NEU: Sendet E-Mail-Benachrichtigungen für erkannte Signalwechsel ***
+     * Sendet E-Mail-Benachrichtigungen für erkannte Signalwechsel
      */
     private void sendSignalChangeNotificationsIfEnabled() {
         try {
-            // Prüfe ob E-Mail-Benachrichtigungen aktiviert sind
             if (emailConfig == null || !emailConfig.isEmailEnabled()) {
-                LOGGER.fine("E-Mail-Benachrichtigungen deaktiviert - keine E-Mails versenden");
+                LOGGER.fine("E-Mail-Benachrichtigungen deaktiviert");
                 return;
             }
             
-            // Hole die aktuellsten Signalwechsel (z.B. letzte 2 Stunden)
             List<SignalChangeEvent> recentChanges = getRecentSignalChangesFromAllPairs(2);
             
             if (recentChanges.isEmpty()) {
@@ -1030,7 +1120,6 @@ public class MainWindowController {
             
             LOGGER.info("Prüfe " + recentChanges.size() + " aktuelle Signalwechsel für E-Mail-Versendung...");
             
-            // Sende E-Mail-Benachrichtigung
             EmailService.EmailSendResult result = emailService.sendSignalChangeNotification(recentChanges);
             
             if (result.isSuccess()) {
@@ -1045,7 +1134,7 @@ public class MainWindowController {
     }
     
     /**
-     * *** NEU: Holt aktuelle Signalwechsel von allen Währungspaaren ***
+     * Holt aktuelle Signalwechsel von allen Währungspaaren
      */
     private List<SignalChangeEvent> getRecentSignalChangesFromAllPairs(int hours) {
         List<SignalChangeEvent> allRecentChanges = new ArrayList<>();
@@ -1059,7 +1148,6 @@ public class MainWindowController {
                 allRecentChanges.addAll(pairChanges);
             }
             
-            // Sortiere nach Zeit (neueste zuerst)
             allRecentChanges.sort((a, b) -> b.getChangeTime().compareTo(a.getChangeTime()));
             
         } catch (Exception e) {
@@ -1085,7 +1173,7 @@ public class MainWindowController {
             tableData.add(row);
         }
         
-        LOGGER.fine("Tabelle mit " + data.size() + " Einträgen aktualisiert (inkl. alle Features + E-Mail + ERWEITERTE ANSICHT)");
+        LOGGER.fine("Tabelle mit " + data.size() + " Einträgen aktualisiert");
     }
     
     /**
@@ -1093,7 +1181,6 @@ public class MainWindowController {
      */
     private void refreshSignalChangeCells() {
         try {
-            // Force refresh der Signalwechsel-Spalte
             if (changeColumn != null) {
                 Platform.runLater(() -> {
                     currencyTable.refresh();
@@ -1159,7 +1246,7 @@ public class MainWindowController {
     }
     
     /**
-     * Gibt verfügbare Währungspaare zurück (für erweiterte GUI-Features)
+     * Gibt verfügbare Währungspaare zurück
      */
     public Set<String> getAvailableCurrencyPairs() {
         try {
@@ -1171,10 +1258,7 @@ public class MainWindowController {
     }
     
     /**
-     * Holt historische Daten für ein Währungspaar (für erweiterte Features)
-     * @param currencyPair Das Währungspaar
-     * @param count Anzahl der gewünschten Einträge
-     * @return Liste der historischen Daten
+     * Holt historische Daten für ein Währungspaar
      */
     public List<CurrencyPairData> getHistoricalDataForPair(String currencyPair, int count) {
         try {
@@ -1186,14 +1270,14 @@ public class MainWindowController {
     }
     
     /**
-     * *** NEU: Gibt die E-Mail-Konfiguration zurück ***
+     * Gibt die E-Mail-Konfiguration zurück
      */
     public EmailConfig getEmailConfig() {
         return emailConfig;
     }
     
     /**
-     * *** NEU: Gibt den E-Mail-Service zurück ***
+     * Gibt den E-Mail-Service zurück
      */
     public EmailService getEmailService() {
         return emailService;
@@ -1221,12 +1305,11 @@ public class MainWindowController {
                 dataService.shutdown();
             }
             
-            // *** NEU: Fahre E-Mail-Service herunter ***
             if (emailService != null) {
                 emailService.shutdown();
             }
             
-            LOGGER.info("MainWindowController heruntergefahren (ERWEITERTE ANSICHT)");
+            LOGGER.info("MainWindowController heruntergefahren");
         } catch (Exception e) {
             LOGGER.log(Level.WARNING, "Fehler beim Herunterfahren: " + e.getMessage(), e);
         }
@@ -1242,6 +1325,85 @@ public class MainWindowController {
         }
         return directory.trim();
     }
+    
+    /**
+     * MetaTrader-Synchronisation nach jedem Refresh
+     */
+    private void syncMetaTraderAfterRefresh() {
+        try {
+            if (emailConfig == null) {
+                emailConfig = new EmailConfig(dataDirectory);
+            }
+            emailConfig.loadConfig();
+            
+            boolean isMetaTraderEnabled = emailConfig.isMetatraderSyncEnabled();
+            String metatraderDir = emailConfig.getMetatraderDirectory();
+            
+            LOGGER.info("📋 MetaTrader-Sync-Check nach Refresh:");
+            LOGGER.info("   - Aktiviert (EmailConfig): " + isMetaTraderEnabled);
+            LOGGER.info("   - Verzeichnis (EmailConfig): " + (metatraderDir != null ? metatraderDir : "nicht gesetzt"));
+            
+            if (!isMetaTraderEnabled) {
+                LOGGER.fine("MetaTrader-Synchronisation deaktiviert - übersprungen");
+                return;
+            }
+            
+            if (metatraderDir == null || metatraderDir.trim().isEmpty()) {
+                LOGGER.warning("MetaTrader-Synchronisation aktiviert, aber kein Verzeichnis konfiguriert!");
+                return;
+            }
+            
+            if (dataService == null || dataService.getSignalChangeHistoryManager() == null) {
+                LOGGER.warning("SignalChangeHistoryManager nicht verfügbar - kann nicht synchronisieren");
+                return;
+            }
+            
+            var signalChangeManager = dataService.getSignalChangeHistoryManager();
+            
+            String currentDir = signalChangeManager.getMetatraderFileDir();
+            boolean currentlyEnabled = signalChangeManager.isMetatraderSyncEnabled();
+            
+            LOGGER.info("   - Aktiviert (SignalChangeManager): " + currentlyEnabled);
+            LOGGER.info("   - Verzeichnis (SignalChangeManager): " + (currentDir != null ? currentDir : "nicht gesetzt"));
+            
+            if (!metatraderDir.equals(currentDir) || !currentlyEnabled) {
+                LOGGER.info("🔧 Synchronisiere SignalChangeManager mit EmailConfig...");
+                try {
+                    signalChangeManager.setMetatraderFileDir(metatraderDir);
+                    LOGGER.info("✅ SignalChangeManager erfolgreich konfiguriert: " + metatraderDir);
+                } catch (Exception e) {
+                    LOGGER.warning("❌ Konnte MetaTrader-Verzeichnis nicht setzen: " + e.getMessage());
+                    return;
+                }
+            }
+            
+            LOGGER.info("🔄 Führe MetaTrader-Synchronisation nach Refresh aus...");
+            
+            try {
+                java.lang.reflect.Method syncMethod = signalChangeManager.getClass()
+                    .getDeclaredMethod("syncLastKnownSignalsToMetaTrader");
+                syncMethod.setAccessible(true);
+                syncMethod.invoke(signalChangeManager);
+                
+                LOGGER.info("✅ MetaTrader-Synchronisation nach Refresh abgeschlossen");
+                
+            } catch (NoSuchMethodException e) {
+                LOGGER.info("⚠️ Verwende Fallback-Methode für Synchronisation...");
+                
+                java.lang.reflect.Method saveMethod = signalChangeManager.getClass()
+                    .getDeclaredMethod("saveLastKnownSignals");
+                saveMethod.setAccessible(true);
+                saveMethod.invoke(signalChangeManager);
+                
+                LOGGER.info("✅ MetaTrader-Synchronisation via Fallback abgeschlossen");
+            }
+            
+        } catch (Exception e) {
+            LOGGER.log(Level.WARNING, "❌ Fehler bei MetaTrader-Synchronisation nach Refresh: " + e.getMessage(), e);
+        }
+    }
+    
+    // ===== INNERE KLASSEN =====
     
     /**
      * Innere Klasse für Tabellenzeilendaten
@@ -1299,7 +1461,6 @@ public class MainWindowController {
                 );
             } catch (Exception e) {
                 LOGGER.warning("Fehler beim Erstellen der SignalChangeTableCell: " + e.getMessage());
-                // Fallback: Leere Zelle
                 return new TableCell<CurrencyPairTableRow, CurrencyPairTableRow>() {
                     @Override
                     protected void updateItem(CurrencyPairTableRow item, boolean empty) {
@@ -1307,93 +1468,11 @@ public class MainWindowController {
                         if (empty || item == null) {
                             setText("");
                         } else {
-                            setText("❌"); // Zeigt Fehler an
+                            setText("❌");
                         }
                     }
                 };
             }
-        }
-    }
-    private void syncMetaTraderAfterRefresh() {
-        try {
-            // ✅ SCHRITT 1: Lade EmailConfig neu um aktuelle MetaTrader-Einstellungen zu bekommen
-            if (emailConfig == null) {
-                emailConfig = new EmailConfig(dataDirectory);
-            }
-            emailConfig.loadConfig();
-            
-            // ✅ SCHRITT 2: Prüfe ob MetaTrader-Sync in der Config aktiviert ist
-            boolean isMetaTraderEnabled = emailConfig.isMetatraderSyncEnabled();
-            String metatraderDir = emailConfig.getMetatraderDirectory();
-            
-            LOGGER.info("📋 MetaTrader-Sync-Check nach Refresh:");
-            LOGGER.info("   - Aktiviert (EmailConfig): " + isMetaTraderEnabled);
-            LOGGER.info("   - Verzeichnis (EmailConfig): " + (metatraderDir != null ? metatraderDir : "nicht gesetzt"));
-            
-            if (!isMetaTraderEnabled) {
-                LOGGER.fine("MetaTrader-Synchronisation deaktiviert - übersprungen");
-                return;
-            }
-            
-            if (metatraderDir == null || metatraderDir.trim().isEmpty()) {
-                LOGGER.warning("MetaTrader-Synchronisation aktiviert, aber kein Verzeichnis konfiguriert!");
-                return;
-            }
-            
-            // ✅ SCHRITT 3: Hole SignalChangeHistoryManager
-            if (dataService == null || dataService.getSignalChangeHistoryManager() == null) {
-                LOGGER.warning("SignalChangeHistoryManager nicht verfügbar - kann nicht synchronisieren");
-                return;
-            }
-            
-            var signalChangeManager = dataService.getSignalChangeHistoryManager();
-            
-            // ✅ SCHRITT 4: Setze MetaTrader-Verzeichnis falls nicht bereits gesetzt
-            String currentDir = signalChangeManager.getMetatraderFileDir();
-            boolean currentlyEnabled = signalChangeManager.isMetatraderSyncEnabled();
-            
-            LOGGER.info("   - Aktiviert (SignalChangeManager): " + currentlyEnabled);
-            LOGGER.info("   - Verzeichnis (SignalChangeManager): " + (currentDir != null ? currentDir : "nicht gesetzt"));
-            
-            // Wenn nicht synchron mit EmailConfig, dann setze es neu
-            if (!metatraderDir.equals(currentDir) || !currentlyEnabled) {
-                LOGGER.info("🔧 Synchronisiere SignalChangeManager mit EmailConfig...");
-                try {
-                    signalChangeManager.setMetatraderFileDir(metatraderDir);
-                    LOGGER.info("✅ SignalChangeManager erfolgreich konfiguriert: " + metatraderDir);
-                } catch (Exception e) {
-                    LOGGER.warning("❌ Konnte MetaTrader-Verzeichnis nicht setzen: " + e.getMessage());
-                    return;
-                }
-            }
-            
-            // ✅ SCHRITT 5: Rufe die Synchronisation direkt auf
-            LOGGER.info("🔄 Führe MetaTrader-Synchronisation nach Refresh aus...");
-            
-            try {
-                // Versuche die Sync-Methode direkt aufzurufen
-                java.lang.reflect.Method syncMethod = signalChangeManager.getClass()
-                    .getDeclaredMethod("syncLastKnownSignalsToMetaTrader");
-                syncMethod.setAccessible(true);
-                syncMethod.invoke(signalChangeManager);
-                
-                LOGGER.info("✅ MetaTrader-Synchronisation nach Refresh abgeschlossen");
-                
-            } catch (NoSuchMethodException e) {
-                LOGGER.info("⚠️ Verwende Fallback-Methode für Synchronisation...");
-                
-                // FALLBACK: Triggere über saveLastKnownSignals()
-                java.lang.reflect.Method saveMethod = signalChangeManager.getClass()
-                    .getDeclaredMethod("saveLastKnownSignals");
-                saveMethod.setAccessible(true);
-                saveMethod.invoke(signalChangeManager);
-                
-                LOGGER.info("✅ MetaTrader-Synchronisation via Fallback abgeschlossen");
-            }
-            
-        } catch (Exception e) {
-            LOGGER.log(Level.WARNING, "❌ Fehler bei MetaTrader-Synchronisation nach Refresh: " + e.getMessage(), e);
-            // Fehler nicht weiterwerfen - Refresh soll trotzdem funktionieren
         }
     }
 }
