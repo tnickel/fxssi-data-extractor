@@ -18,6 +18,7 @@ import com.fxssi.extractor.storage.CurrencyPairDataManager;
 import com.fxssi.extractor.storage.SignalChangeHistoryManager;
 import com.fxssi.extractor.notification.EmailService;
 import com.fxssi.extractor.notification.EmailConfig;
+import com.fxssi.extractor.config.ExportConfig;
 
 /**
  * Service-Klasse für die Bereitstellung von FXSSI-Daten für die GUI
@@ -42,6 +43,7 @@ public class GuiDataService {
     private SignalChangeHistoryManager signalChangeManager;
     private EmailConfig emailConfig;
     private EmailService emailService;
+    private ExportConfig exportConfig;
     private List<CurrencyPairData> cachedData;
     private LocalDateTime lastCacheUpdate;
     private boolean isInitialized = false;
@@ -87,6 +89,9 @@ public class GuiDataService {
             emailConfig = new EmailConfig(dataDirectory);
             emailConfig.loadConfig(); // Lade gespeicherte E-Mail-Konfiguration
             emailService = new EmailService(emailConfig);
+            
+            // Initialisiere ExportConfig
+            exportConfig = new ExportConfig(dataDirectory);
             
             // *** KRITISCHE KORREKTUR: SignalChangeHistoryManager MIT EmailService erstellen ***
             signalChangeManager = new SignalChangeHistoryManager(dataDirectory, emailService);
@@ -534,6 +539,22 @@ public class GuiDataService {
             throw new IllegalStateException("GuiDataService ist nicht initialisiert");
         }
         return signalChangeManager;
+    }
+    
+    /**
+     * Gibt den CurrencyPairDataManager zurück
+     * @return Der CurrencyPairDataManager
+     */
+    public CurrencyPairDataManager getCurrencyPairDataManager() {
+        return currencyPairManager;
+    }
+    
+    /**
+     * Gibt die ExportConfig zurück
+     * @return Die ExportConfig
+     */
+    public ExportConfig getExportConfig() {
+        return exportConfig;
     }
     
     /**

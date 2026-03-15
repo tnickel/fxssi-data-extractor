@@ -81,6 +81,8 @@ public class MainWindowController {
     private Button historicalDataButton;
     private Button debugButton;
     private Button emailConfigButton;
+    private Button compactSignalsButton;
+    private Button exportSignalsButton;
     
     // NEU: Intervall-Refresh Steuerelemente
     private CheckBox intervalRefreshCheckBox;
@@ -251,6 +253,18 @@ public class MainWindowController {
         debugButton.getStyleClass().add("debug-button");
         debugButton.setOnAction(event -> debugHistoricalDataLoading());
         
+        // Compact Signals Button
+        compactSignalsButton = new Button("🗜 CompactSignals1H");
+        compactSignalsButton.setFont(Font.font(10));
+        compactSignalsButton.getStyleClass().add("compact-signals-button");
+        compactSignalsButton.setOnAction(event -> openCompactSignalsWindow());
+        
+        // Export Signals Button
+        exportSignalsButton = new Button("📤 Export Signals");
+        exportSignalsButton.setFont(Font.font(10));
+        exportSignalsButton.getStyleClass().add("export-signals-button");
+        exportSignalsButton.setOnAction(event -> openExportSignalsWindow());
+        
         // Separator
         Separator separator1 = new Separator();
         separator1.setOrientation(javafx.geometry.Orientation.VERTICAL);
@@ -300,7 +314,7 @@ public class MainWindowController {
         VBox statusArea = createStatusArea();
         
         row1.getChildren().addAll(
-            refreshButton, historicalDataButton, emailConfigButton, debugButton,
+            refreshButton, historicalDataButton, emailConfigButton, debugButton, compactSignalsButton, exportSignalsButton,
             separator1,
             intervalRefreshCheckBox, refreshIntervalSpinner, minLabel,
             spacer1, statusArea
@@ -515,6 +529,42 @@ public class MainWindowController {
             Alert alert = new Alert(Alert.AlertType.ERROR);
             alert.setTitle("Fehler");
             alert.setHeaderText("E-Mail-Konfiguration konnte nicht geöffnet werden");
+            alert.setContentText("Fehler: " + e.getMessage());
+            alert.showAndWait();
+        }
+    }
+    
+    /**
+     * Öffnet das Compact Signals Fenster
+     */
+    private void openCompactSignalsWindow() {
+        try {
+            LOGGER.info("Öffne Compact Signals Fenster...");
+            CompactSignalsWindow window = new CompactSignalsWindow(stage, dataService.getCurrencyPairDataManager());
+            window.show();
+        } catch (Exception e) {
+            LOGGER.severe("Fehler beim Öffnen des Compact Signals Fensters: " + e.getMessage());
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Fehler");
+            alert.setHeaderText("Compact Signals konnte nicht gestartet werden");
+            alert.setContentText("Fehler: " + e.getMessage());
+            alert.showAndWait();
+        }
+    }
+    
+    /**
+     * Öffnet das Export Signals Fenster
+     */
+    private void openExportSignalsWindow() {
+        try {
+            LOGGER.info("Öffne Export Signals Fenster...");
+            ExportSignalsWindow window = new ExportSignalsWindow(stage, dataService.getCurrencyPairDataManager(), dataService.getExportConfig());
+            window.show();
+        } catch (Exception e) {
+            LOGGER.severe("Fehler beim Öffnen des Export Signals Fensters: " + e.getMessage());
+            Alert alert = new Alert(Alert.AlertType.ERROR);
+            alert.setTitle("Fehler");
+            alert.setHeaderText("Export Signals konnte nicht gestartet werden");
             alert.setContentText("Fehler: " + e.getMessage());
             alert.showAndWait();
         }

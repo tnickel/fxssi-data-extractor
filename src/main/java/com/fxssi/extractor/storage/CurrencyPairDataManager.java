@@ -10,10 +10,13 @@ import java.nio.file.Paths;
 import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.logging.Logger;
@@ -56,6 +59,14 @@ public class CurrencyPairDataManager {
         
         LOGGER.info("CurrencyPairDataManager initialisiert für Verzeichnis: " + dataDirectory);
         LOGGER.info("Währungspaar-Dateien werden gespeichert in: " + currencyDataPath.toAbsolutePath());
+    }
+    
+    /**
+     * Gibt das Verzeichnis der Währungspaar-Dateien zurück
+     * @return Der Pfad zum Währungspaar-Datenverzeichnis
+     */
+    public Path getCurrencyDataPath() {
+        return currencyDataPath;
     }
     
     /**
@@ -263,6 +274,223 @@ public class CurrencyPairDataManager {
         
         stats.append("\nGesamt: ").append(totalRecords).append(" Datensätze");
         return stats.toString();
+    }
+    
+    /**
+     * Komprimiert die Daten aller Währungspaare, sodass pro Stunde maximal ein Signal (das Letzte)
+     * beibehalten wird.
+     * 
+     * @param progressCallback Callback für den Fortschritt: (Aktuell, Gesamt)
+     * @param messageCallback  Callback für Statusnachrichten
+     * @return Ein detaillierter Bericht als String.
+     */
+    public String compactAllDataToHourly(java.util.function.BiConsumer<Integer, Integer> progressCallback, java.util.function.Consumer<String> messageCallback) {
+        Set<String> pairs = listAvailableCurrencyPairs();
+        if (pairs.isEmpty()) {
+            if (messageCallback != null) messageCallback.accept("Keine Daten zum Komprimieren gefunden.");
+            return "Keine Daten gefunden.";
+        }
+
+        int total = pairs.size();
+        int current = 0;
+        int totalBefore = 0;
+        int totalAfter = 0;
+        
+        StringBuilder report = new StringBuilder();
+        report.append("Währungspaar | Davor | Danach\n");
+        report.append("-----------------------------\n");
+
+        for (String pair : pairs) {
+            if (messageCallback != null) {
+                messageCallback.accept("Komprimiere " + pair + "...");
+            }
+            
+            try {
+                String result = compactDataForPair(pair);
+                report.append(result).append("\n");
+                
+                // Extrahiere Zahlen für Gesamtstatistik (Format: "EUR_USD   : 1000 -> 500")
+                if (result.contains("->")) {
+                    String[] parts = result.split(":");
+                    if (parts.length == 2) {
+                        String[] nums = parts[1].split("->");
+                        if (nums.length == 2) {
+                            totalBefore += Integer.parseInt(nums[0].trim());
+                            totalAfter += Integer.parseInt(nums[1].trim());
+                        }
+                    }
+                }
+            } catch (Exception e) {
+                LOGGER.log(Level.SEVERE, "Fehler bei der Komprimierung von " + pair, e);
+                report.append(pair).append(" : Fehler - ").append(e.getMessage()).append("\n");
+            }
+
+            current++;
+            if (progressCallback != null) {
+                progressCallback.accept(current, total);
+            }
+        }
+        
+        report.append("-----------------------------\n");
+        report.append(String.format("GESAMT     : %d -> %d\n", totalBefore, totalAfter));
+        
+        if (messageCallback != null) {
+            messageCallback.accept("Komprimierung abgeschlossen.");
+        }
+        return report.toString();
+    }
+
+    /**
+     * Exportiert alle Währungspaar-Daten in das angegebene Zielverzeichnis.
+     * @param targetDirectory Zielverzeichnis für den Export
+     * @param progressCallback Callback für den Fortschritt (Aktuell, Gesamt)
+     * @param messageCallback Callback für Statusmeldungen
+     * @return Ein Bericht über den Exportvorgang (Anzahl Dateien, Anzahl Datensätze).
+     */
+    public String exportAllSignals(Path targetDirectory, java.util.function.BiConsumer<Integer, Integer> progressCallback, java.util.function.Consumer<String> messageCallback) {
+        if (targetDirectory == null || !Files.isDirectory(targetDirectory)) {
+            return "Export fehlgeschlagen: Zielverzeichnis ungültig.";
+        }
+
+        Set<String> pairs = listAvailableCurrencyPairs();
+        if (pairs.isEmpty()) {
+            if (messageCallback != null) messageCallback.accept("Keine Daten zum Exportieren gefunden.");
+            return "Keine Daten gefunden.";
+        }
+
+        int totalFiles = pairs.size();
+        int currentFileIndex = 0;
+        int filesExported = 0;
+        int totalRecordsExported = 0;
+
+        for (String pair : pairs) {
+            String normalizedPair = normalizeCurrencyPairName(pair);
+            Path sourceFile = currencyDataPath.resolve(normalizedPair + FILE_EXTENSION);
+            Path destFile = targetDirectory.resolve(normalizedPair + FILE_EXTENSION);
+
+            if (messageCallback != null) {
+                messageCallback.accept("Exportiere " + pair + "...");
+            }
+
+            if (Files.exists(sourceFile)) {
+                ReentrantLock fileLock = getFileLock(normalizedPair);
+                fileLock.lock();
+                try {
+                    // Daten lesen, Timestamps auf volle Stunden normalisieren, und in Ziel schreiben
+                    List<CurrencyPairData> data = readDataFromPath(sourceFile, normalizedPair);
+                    long recordCount = data.size();
+
+                    try (BufferedWriter writer = Files.newBufferedWriter(destFile, StandardCharsets.UTF_8,
+                            StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+                        writer.write(getCurrencyPairCsvHeader());
+                        writer.newLine();
+                        for (CurrencyPairData d : data) {
+                            d.setTimestamp(d.getTimestamp().truncatedTo(ChronoUnit.HOURS));
+                            writer.write(formatCurrencyDataToCsv(d));
+                            writer.newLine();
+                        }
+                        writer.flush();
+                    }
+
+                    filesExported++;
+                    totalRecordsExported += recordCount;
+                    
+                    LOGGER.info("Exportiert: " + sourceFile.getFileName() + " nach " + targetDirectory.toAbsolutePath());
+                } catch (IOException e) {
+                    LOGGER.log(Level.SEVERE, "Fehler beim Exportieren von " + pair + " nach " + destFile, e);
+                    if (messageCallback != null) {
+                        messageCallback.accept("Fehler beim Export von " + pair);
+                    }
+                } finally {
+                    fileLock.unlock();
+                }
+            }
+
+            currentFileIndex++;
+            if (progressCallback != null) {
+                progressCallback.accept(currentFileIndex, totalFiles);
+            }
+        }
+
+        if (messageCallback != null) {
+            messageCallback.accept("Export abgeschlossen.");
+        }
+
+        return String.format("Export erfolgreich beendet.\n\nDateien exportiert: %d\nDatensätze exportiert: %d\nZielverzeichnis:\n%s", 
+                filesExported, totalRecordsExported, targetDirectory.toAbsolutePath().toString());
+    }
+
+    /**
+     * Komprimiert die Datenzeilen für ein bestimmtes Währungspaar.
+     * Gruppiert die Signale stündlich und behält nur das jeweils letzte pro Stunde.
+     * @return Bericht-String für das Währungspaar
+     */
+    private String compactDataForPair(String currencyPair) throws IOException {
+        String normalizedPair = normalizeCurrencyPairName(currencyPair);
+        Path originalFilePath = currencyDataPath.resolve(normalizedPair + FILE_EXTENSION);
+        Path tempFilePath = currencyDataPath.resolve(normalizedPair + FILE_EXTENSION + ".tmp");
+
+        if (!Files.exists(originalFilePath)) {
+            return String.format("%-10s :    0 ->    0", normalizedPair);
+        }
+
+        ReentrantLock fileLock = getFileLock(normalizedPair);
+        fileLock.lock();
+
+        try {
+            // Lese alle Daten für dieses Paar
+            List<CurrencyPairData> allData = readDataFromPath(originalFilePath, normalizedPair);
+
+            if (allData.isEmpty()) {
+                return String.format("%-10s :    0 ->    0", normalizedPair);
+            }
+
+            // Gruppiere nach Stunde (yyyy-MM-dd HH).
+            // TreeMap garantiert chronologische Reihenfolge der Schlüssel.
+            Map<String, CurrencyPairData> hourlyData = new TreeMap<>();
+            DateTimeFormatter hourFormatter = DateTimeFormatter.ofPattern("yyyy-MM-dd HH");
+
+            for (CurrencyPairData data : allData) {
+                String hourKey = data.getTimestamp().format(hourFormatter);
+                // Überschreibt vorherige Einträge der gleichen Stunde -> behält nur das Letzte
+                hourlyData.put(hourKey, data);
+            }
+
+            // Normalisiere Timestamps auf volle Stunden (z.B. 11:59:35 -> 11:00:00)
+            for (CurrencyPairData data : hourlyData.values()) {
+                data.setTimestamp(data.getTimestamp().truncatedTo(ChronoUnit.HOURS));
+            }
+
+            // Schreibe die komprimierten Daten zuerst in eine temporäre Datei
+            try (BufferedWriter writer = Files.newBufferedWriter(tempFilePath, StandardCharsets.UTF_8,
+                    StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING)) {
+
+                // Header schreiben
+                writer.write(getCurrencyPairCsvHeader());
+                writer.newLine();
+
+                // Daten schreiben
+                for (CurrencyPairData data : hourlyData.values()) {
+                    writer.write(formatCurrencyDataToCsv(data));
+                    writer.newLine();
+                }
+                writer.flush();
+            }
+
+            // Tausche temporäre Datei mit der Originalen
+            Files.delete(originalFilePath);
+            Files.move(tempFilePath, originalFilePath);
+
+            LOGGER.info("Erfolgreich komprimiert: " + normalizedPair + ". Reduziert von " + allData.size() + " auf " + hourlyData.size() + " Einträge.");
+            return String.format("%-10s : %d -> %d", normalizedPair, allData.size(), hourlyData.size());
+
+        } catch (Exception e) {
+            // Räume temp file auf im Fehlerfall, sofern wir bis dahin kamen
+            Files.deleteIfExists(tempFilePath);
+            throw new IOException("Konnte Daten für " + normalizedPair + " nicht komprimieren.", e);
+        } finally {
+            fileLock.unlock();
+        }
     }
     
     /**

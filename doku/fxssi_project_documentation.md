@@ -3,7 +3,7 @@
 [![Java](https://img.shields.io/badge/Java-11+-orange.svg)](https://openjdk.java.net/)
 [![JavaFX](https://img.shields.io/badge/JavaFX-17+-blue.svg)](https://openjfx.io/)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-[![Version](https://img.shields.io/badge/Version-2.2-brightgreen.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/Version-1.0.0-brightgreen.svg)](CHANGELOG.md)
 
 Ein fortschrittliches Java-Tool für die automatisierte Extraktion und Analyse von Forex-Sentiment-Daten von FXSSI.com mit Live-Monitoring, Signalwechsel-Erkennung und E-Mail-Benachrichtigungen.
 
@@ -53,8 +53,14 @@ Ein fortschrittliches Java-Tool für die automatisierte Extraktion und Analyse v
 
 - Java 11 oder höher
 - JavaFX 17+ (für GUI-Modus)
+- Maven 3.9.6 (installiert in `D:\DevelopmentTools\apache-maven-3.9.6`)
 - Internet-Verbindung für FXSSI.com Zugriff
 - GMX-E-Mail-Account (optional, für Benachrichtigungen)
+
+### Entwicklungstools-Pfade
+| Tool   | Installationspfad |
+|--------|-------------------|
+| Maven  | `D:\DevelopmentTools\apache-maven-3.9.6` |
 
 ## 🚀 Installation
 
@@ -137,15 +143,19 @@ src/main/java/
 │   │   └── SignalChangeHistoryManager.java # Signalwechsel-Historie
 │   ├── scheduler/
 │   │   └── HourlyScheduler.java         # Zeitsteuerung
-│   ├── notification/
-│   │   ├── EmailConfig.java             # E-Mail-Konfiguration
-│   │   └── EmailService.java            # E-Mail-Versendung
-│   └── gui/
-│       ├── FXSSIGuiApplication.java     # JavaFX Application
-│       ├── MainWindowController.java    # Haupt-GUI-Controller
-│       ├── EmailConfigWindow.java       # E-Mail-Konfigurationsfenster
-│       ├── HistoricalDataWindow.java    # Historische Daten Viewer
-│       └── [Custom TableCells]          # Spezialisierte UI-Komponenten
+│   └── notification/
+│       ├── EmailConfig.java             # E-Mail-Konfiguration
+│       └── EmailService.java            # E-Mail-Versendung
+└── com/fxsssi/extractor/
+    ├── storage/
+    │   └── CurrencyPairDataManager.java # Währungspaar-spezifische Dateien (Alternative)
+    └── gui/
+        ├── FXSSIGuiApplication.java     # JavaFX Application
+        ├── MainWindowController.java    # Haupt-GUI-Controller
+        ├── config/EmailConfigWindow.java # E-Mail-Konfigurationsfenster
+        ├── config/MetaTraderPanel.java  # MetaTrader-Integration UI
+        ├── HistoricalDataWindow.java    # Historische Daten Viewer
+        └── [Custom TableCells]          # Spezialisierte UI-Komponenten
 ```
 
 ### Design Patterns
@@ -385,7 +395,7 @@ mvn clean package
 
 ## 📝 Changelog
 
-### Version 2.2 (Aktuell)
+### Version 1.0.0 (Aktuell)
 - ✅ Vollständige E-Mail-Integration mit GMX-Support
 - ✅ Erweiterte Signalwechsel-Erkennung mit Wichtigkeits-Klassifizierung
 - ✅ Historische Daten-Viewer mit CSV-Export
@@ -393,12 +403,10 @@ mvn clean package
 - ✅ Verbesserte GUI mit 1700px Breite für E-Mail-Features
 - ✅ Thread-sichere E-Mail-Versendung mit Rate-Limiting
 
-### Version 2.1
+### Entwicklungshistorie (Pre-Release)
 - ✅ Signalwechsel-Erkennung und -Historie
 - ✅ Währungspaar-spezifische Dateispeicherung
 - ✅ Erweiterte GUI mit Custom TableCells
-
-### Version 2.0
 - ✅ JavaFX GUI-Implementation
 - ✅ Dual-Mode Support (Console + GUI)
 - ✅ Auto-Refresh mit konfigurierbaren Intervallen
