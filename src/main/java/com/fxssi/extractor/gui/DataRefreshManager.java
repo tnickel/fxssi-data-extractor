@@ -1,4 +1,4 @@
-package com.fxsssi.extractor.gui;
+package com.fxssi.extractor.gui;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -21,7 +21,7 @@ import java.util.logging.Logger;
  * 2. Tageszeit-Modus: Refresh einmal täglich zu einer bestimmten Uhrzeit
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.2 (mit täglichem Zeitplan-Support)
+ * @version 1.9 (RefreshType-Enum + kontrolliertes Speichern)
  */
 public class DataRefreshManager {
     
@@ -29,8 +29,12 @@ public class DataRefreshManager {
     private static final int MIN_REFRESH_INTERVAL = 1; // Minimum 1 Minute
     private static final int MAX_REFRESH_INTERVAL = 60; // Maximum 60 Minuten
     
+    public enum RefreshType {
+        INTERVAL, DAILY_CHECK, MANUAL
+    }
+
     private final ScheduledExecutorService scheduler;
-    private final Runnable refreshTask;
+    private final java.util.function.Consumer<RefreshType> refreshTask;
     private ScheduledFuture<?> currentRefreshTask;
     private boolean isRunning = false;
     private int currentIntervalMinutes = 15; // Standard: 15 Minuten
@@ -51,7 +55,7 @@ public class DataRefreshManager {
      * Konstruktor
      * @param refreshTask Die Aufgabe die für das Refresh ausgeführt werden soll
      */
-    public DataRefreshManager(Runnable refreshTask) {
+    public DataRefreshManager(java.util.function.Consumer<RefreshType> refreshTask) {
         this.refreshTask = refreshTask;
         this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "GUI-DataRefresh-Thread");
@@ -78,7 +82,7 @@ public class DataRefreshManager {
             
             // Starte neues Refresh mit thread-sicherem Wrapper
             currentRefreshTask = scheduler.scheduleAtFixedRate(
-                new SafeRefreshWrapper(this::executeRefreshSafely),
+                new SafeRefreshWrapper(() -> executeRefreshSafely(RefreshType.INTERVAL)),
                 0,                    // Sofortige erste Ausführung
                 intervalMinutes,      // Intervall
                 TimeUnit.MINUTES
@@ -256,7 +260,7 @@ public class DataRefreshManager {
                 lastDailyExecutionDate = today;
                 
                 // Führe den eigentlichen Refresh aus
-                executeRefreshSafely();
+                executeRefreshSafely(RefreshType.DAILY_CHECK);
                 
                 LOGGER.info("Täglicher Refresh abgeschlossen für " + today);
             } else {
@@ -294,7 +298,7 @@ public class DataRefreshManager {
     /**
      * Thread-sichere Ausführung der Refresh-Aufgabe
      */
-    private void executeRefreshSafely() {
+    private void executeRefreshSafely(RefreshType type) {
         // Prüfe ob bereits ein Refresh läuft
         if (!refreshInProgress.compareAndSet(false, true)) {
             LOGGER.fine("Refresh übersprungen - bereits ein Refresh im Gange");
@@ -310,8 +314,8 @@ public class DataRefreshManager {
                 return;
             }
             
-            LOGGER.fine("Führe Auto-Refresh aus...");
-            refreshTask.run();
+            LOGGER.fine("Führe Auto-Refresh aus... Typ: " + type);
+            refreshTask.accept(type);
             lastRefreshTime = currentTime;
             LOGGER.fine("Auto-Refresh abgeschlossen");
             
@@ -353,7 +357,7 @@ public class DataRefreshManager {
         // Verwende separaten Thread für manuelles Refresh
         scheduler.execute(() -> {
             try {
-                executeRefreshSafely();
+                executeRefreshSafely(RefreshType.MANUAL);
                 LOGGER.info("Manuelles Refresh abgeschlossen");
             } catch (Exception e) {
                 LOGGER.log(Level.WARNING, "Fehler beim manuellen Refresh: " + e.getMessage(), e);
@@ -570,7 +574,7 @@ public class DataRefreshManager {
      * Erstellt einen DataRefreshManager mit angepassten Einstellungen für Tests
      */
     public static DataRefreshManager createTestManager(Runnable refreshTask, int defaultInterval) {
-        DataRefreshManager manager = new DataRefreshManager(refreshTask);
+        DataRefreshManager manager = new DataRefreshManager(type -> refreshTask.run());
         manager.currentIntervalMinutes = manager.validateInterval(defaultInterval);
         return manager;
     }

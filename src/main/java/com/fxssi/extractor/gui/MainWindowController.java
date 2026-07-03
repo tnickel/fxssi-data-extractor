@@ -1,4 +1,4 @@
-package com.fxsssi.extractor.gui;
+package com.fxssi.extractor.gui;
 
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -11,7 +11,7 @@ import com.fxssi.extractor.model.CurrencyPairData;
 import com.fxssi.extractor.model.SignalChangeEvent;
 import com.fxssi.extractor.notification.EmailConfig;
 import com.fxssi.extractor.notification.EmailService;
-import com.fxsssi.extractor.gui.config.EmailConfigWindow;
+import com.fxssi.extractor.gui.config.EmailConfigWindow;
 
 import javafx.application.Platform;
 import javafx.collections.FXCollections;
@@ -50,7 +50,7 @@ import javafx.util.Callback;
  * 2. Täglicher FXSSI-Check (Checkbox, Default: aktiviert um 12:00 Uhr) - einmal täglich
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.8 (mit Intervall- und Tageszeit-Refresh)
+ * @version 1.9 (stündlicher Hintergrund-Fetch + kontrolliertes last_known_signals-Schreiben)
  */
 public class MainWindowController {
     
@@ -233,7 +233,7 @@ public class MainWindowController {
         refreshButton = new Button("🔄 Refresh + Signalwechsel-Check");
         refreshButton.setFont(Font.font(12));
         refreshButton.getStyleClass().add("refresh-button");
-        refreshButton.setOnAction(event -> refreshData());
+        refreshButton.setOnAction(event -> refreshData(DataRefreshManager.RefreshType.MANUAL));
         
         // Historische Daten Button
         historicalDataButton = new Button("📊 Historische Daten");
@@ -269,10 +269,10 @@ public class MainWindowController {
         Separator separator1 = new Separator();
         separator1.setOrientation(javafx.geometry.Orientation.VERTICAL);
         
-        // --- Intervall-Refresh (Default: DEAKTIVIERT) ---
-        intervalRefreshCheckBox = new CheckBox("Intervall-Refresh:");
+        // --- Intervall-Refresh (Default: AKTIVIERT) ---
+        intervalRefreshCheckBox = new CheckBox("Stündliche Abfrage:");
         intervalRefreshCheckBox.setFont(Font.font(12));
-        intervalRefreshCheckBox.setSelected(false); // DEFAULT: Deaktiviert
+        intervalRefreshCheckBox.setSelected(true); // DEFAULT: Aktiviert
         intervalRefreshCheckBox.getStyleClass().add("interval-refresh-checkbox");
         intervalRefreshCheckBox.setOnAction(event -> {
             if (intervalRefreshCheckBox.isSelected()) {
@@ -286,10 +286,10 @@ public class MainWindowController {
         });
         
         // Intervall Spinner
-        refreshIntervalSpinner = new Spinner<>(1, 60, 15);
+        refreshIntervalSpinner = new Spinner<>(1, 60, 60);
         refreshIntervalSpinner.setPrefWidth(80);
         refreshIntervalSpinner.getStyleClass().add("interval-spinner");
-        refreshIntervalSpinner.setDisable(true); // Default deaktiviert weil Checkbox aus
+        refreshIntervalSpinner.setDisable(false); // Default aktiviert weil Checkbox an
         refreshIntervalSpinner.valueProperty().addListener((obs, oldVal, newVal) -> {
             if (intervalRefreshCheckBox.isSelected()) {
                 refreshManager.updateRefreshInterval(newVal);
@@ -418,25 +418,25 @@ public class MainWindowController {
             boolean dailyActive = dailyRefreshCheckBox != null && dailyRefreshCheckBox.isSelected();
             
             if (intervalActive && dailyActive) {
-                status.append(String.format("✅ Intervall: alle %d Min. + Täglicher Check: %02d:%02d Uhr",
+                status.append(String.format("✅ Stündl. Datenabruf (alle %d Min.) | Tägliche Datei + last_known_signals: %02d:%02d Uhr",
                     refreshIntervalSpinner.getValue(),
                     dailyHourSpinner.getValue(),
                     dailyMinuteSpinner.getValue()));
                 refreshStatusLabel.setStyle("-fx-text-fill: #2E7D32; -fx-font-weight: bold;");
                 
             } else if (intervalActive) {
-                status.append(String.format("✅ Intervall-Refresh: alle %d Min.",
+                status.append(String.format("✅ Stündl. Datenabruf (alle %d Min.) – kein täglicher Datei-Check aktiv",
                     refreshIntervalSpinner.getValue()));
                 refreshStatusLabel.setStyle("-fx-text-fill: #1565C0;");
                 
             } else if (dailyActive) {
-                status.append(String.format("✅ Täglicher Check: %02d:%02d Uhr",
+                status.append(String.format("✅ Tägliche Datei + last_known_signals: %02d:%02d Uhr – kein Hintergrund-Datenabruf",
                     dailyHourSpinner.getValue(),
                     dailyMinuteSpinner.getValue()));
                 refreshStatusLabel.setStyle("-fx-text-fill: #2E86AB;");
                 
             } else {
-                status.append("⚠️ Kein automatischer Refresh aktiv - nur manuell");
+                status.append("⚠️ Kein automatischer Refresh aktiv – nur manueller Refresh möglich");
                 refreshStatusLabel.setStyle("-fx-text-fill: #E65100; -fx-font-weight: bold;");
             }
             
@@ -847,7 +847,7 @@ public class MainWindowController {
         bottomArea.setPadding(new Insets(5, 20, 5, 20));
         bottomArea.getStyleClass().add("status-bar");
         
-        Label appInfo = new Label("FXSSI Data Extractor v1.8");
+        Label appInfo = new Label("FXSSI Data Extractor v1.9");
         appInfo.setFont(Font.font(10));
         appInfo.getStyleClass().add("app-info");
         
@@ -1017,7 +1017,7 @@ public class MainWindowController {
             dataService.initialize();
             
             // Initiale Datenladung
-            refreshData();
+            refreshData(DataRefreshManager.RefreshType.MANUAL);
             
             // Starte Refresh basierend auf Checkbox-Zuständen
             // Default: Intervall-Refresh ist DEAKTIVIERT
@@ -1085,7 +1085,7 @@ public class MainWindowController {
     /**
      * Aktualisiert die Daten in der Tabelle mit Signalwechsel-Erkennung UND E-Mail-Versendung
      */
-    private void refreshData() {
+    private void refreshData(DataRefreshManager.RefreshType type) {
         Platform.runLater(() -> {
             updateStatus("Lade Daten und erkenne Signalwechsel...");
             refreshButton.setDisable(true);
@@ -1096,7 +1096,8 @@ public class MainWindowController {
         // Lade Daten asynchron
         new Thread(() -> {
             try {
-                List<CurrencyPairData> data = dataService.forceDataRefresh();
+                boolean saveDaily = (type == DataRefreshManager.RefreshType.DAILY_CHECK || type == DataRefreshManager.RefreshType.MANUAL);
+                List<CurrencyPairData> data = dataService.forceDataRefresh(saveDaily);
 
                 // MetaTrader-Synchronisation nach jedem Refresh
                 syncMetaTraderAfterRefresh();

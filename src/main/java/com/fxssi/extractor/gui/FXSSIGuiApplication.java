@@ -1,4 +1,4 @@
-package com.fxsssi.extractor.gui;
+package com.fxssi.extractor.gui;
 
 import javafx.application.Application;
 import javafx.scene.Scene;
@@ -12,12 +12,12 @@ import java.util.logging.Level;
  * Vollständige Java-Implementation ohne FXML mit konfigurierbarem Datenverzeichnis
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.3 (mit erweiterten Fensterabmessungen für bessere Balken-Sichtbarkeit)
+ * @version 1.9 (stündlicher Hintergrund-Fetch + kontrolliertes last_known_signals-Schreiben)
  */
 public class FXSSIGuiApplication extends Application {
     
     private static final Logger LOGGER = Logger.getLogger(FXSSIGuiApplication.class.getName());
-    public static final String APP_VERSION = "1.0.0";
+    public static final String APP_VERSION = "1.9.0";
     private static final String WINDOW_TITLE = "FXSSI Data Extractor v" + APP_VERSION + " - Live Sentiment Monitor";
     private static final int WINDOW_WIDTH = 1820;   // *** ERWEITERT: 30% größer (von 1400 auf 1820) ***
     private static final int WINDOW_HEIGHT = 1040;  // *** ERWEITERT: 30% größer (von 800 auf 1040) ***

@@ -1,4 +1,4 @@
-package com.fxsssi.extractor.gui;
+package com.fxssi.extractor.gui;
 
 import com.fxssi.extractor.config.ExportConfig;
 import com.fxssi.extractor.storage.CurrencyPairDataManager;

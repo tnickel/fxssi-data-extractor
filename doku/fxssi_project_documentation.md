@@ -143,19 +143,16 @@ src/main/java/
 │   │   └── SignalChangeHistoryManager.java # Signalwechsel-Historie
 │   ├── scheduler/
 │   │   └── HourlyScheduler.java         # Zeitsteuerung
-│   └── notification/
-│       ├── EmailConfig.java             # E-Mail-Konfiguration
-│       └── EmailService.java            # E-Mail-Versendung
-└── com/fxsssi/extractor/
-    ├── storage/
-    │   └── CurrencyPairDataManager.java # Währungspaar-spezifische Dateien (Alternative)
-    └── gui/
-        ├── FXSSIGuiApplication.java     # JavaFX Application
-        ├── MainWindowController.java    # Haupt-GUI-Controller
-        ├── config/EmailConfigWindow.java # E-Mail-Konfigurationsfenster
-        ├── config/MetaTraderPanel.java  # MetaTrader-Integration UI
-        ├── HistoricalDataWindow.java    # Historische Daten Viewer
-        └── [Custom TableCells]          # Spezialisierte UI-Komponenten
+│   ├── notification/
+│   │   ├── EmailConfig.java             # E-Mail-Konfiguration
+│   │   └── EmailService.java            # E-Mail-Versendung
+│   └── gui/
+│       ├── FXSSIGuiApplication.java     # JavaFX Application
+│       ├── MainWindowController.java    # Haupt-GUI-Controller
+│       ├── config/EmailConfigWindow.java # E-Mail-Konfigurationsfenster
+│       ├── config/MetaTraderPanel.java  # MetaTrader-Integration UI
+│       ├── HistoricalDataWindow.java    # Historische Daten Viewer
+│       └── [Custom TableCells]          # Spezialisierte UI-Komponenten
 ```
 
 ### Design Patterns

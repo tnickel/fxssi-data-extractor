@@ -1,6 +1,6 @@
-package com.fxsssi.extractor.gui;
+package com.fxssi.extractor.gui;
 
-import com.fxsssi.extractor.gui.MainWindowController.CurrencyPairTableRow;
+import com.fxssi.extractor.gui.MainWindowController.CurrencyPairTableRow;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;

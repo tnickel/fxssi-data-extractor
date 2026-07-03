@@ -9,7 +9,7 @@ import com.fxssi.extractor.scraper.FXSSIScraper;
 import com.fxssi.extractor.scraper.FearGreedScraper;
 import com.fxssi.extractor.storage.DataFileManager;
 import com.fxssi.extractor.storage.CurrencyPairDataManager;
-import com.fxsssi.extractor.gui.FXSSIGuiApplication;
+import com.fxssi.extractor.gui.FXSSIGuiApplication;
 
 /**
  * Erweiterte Hauptklasse für das FXSSI Datenextraktions-Programm

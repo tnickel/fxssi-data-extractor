@@ -1,8 +1,8 @@
-package com.fxsssi.extractor.gui;
+package com.fxssi.extractor.gui;
 
 import com.fxssi.extractor.model.SignalChangeEvent;
 import com.fxssi.extractor.storage.SignalChangeHistoryManager;
-import com.fxsssi.extractor.gui.MainWindowController.CurrencyPairTableRow;
+import com.fxssi.extractor.gui.MainWindowController.CurrencyPairTableRow;
 
 import javafx.animation.Animation;
 import javafx.animation.PauseTransition;

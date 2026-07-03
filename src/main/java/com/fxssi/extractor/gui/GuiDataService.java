@@ -1,4 +1,4 @@
-package com.fxsssi.extractor.gui;
+package com.fxssi.extractor.gui;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
@@ -28,7 +28,7 @@ import com.fxssi.extractor.config.ExportConfig;
  * ERWEITERT: Integration des CNN Fear & Greed Index als BTC/USD Symbol
  * 
  * @author Generated for FXSSI Data Extraction GUI
- * @version 1.6 (mit Fear & Greed Index Integration)
+ * @version 1.9 (stündlicher Fetch + kontrolliertes last_known_signals + tägliche CSV-Steuerung)
  */
 public class GuiDataService {
     
@@ -131,9 +131,10 @@ public class GuiDataService {
     /**
      * Holt aktuelle Daten (mit Caching für Performance)
      * WICHTIG: Speichert bei jedem Refresh in ALLE SYSTEME mit automatischen Threshold-E-Mails
+     * WICHTIG: Speichert bei jedem Refresh in entsprechende Systeme
      * ERWEITERT: Kombiniert FXSSI-Daten mit Fear & Greed Index
      */
-    public List<CurrencyPairData> getCurrentData() throws Exception {
+    public List<CurrencyPairData> getCurrentData(boolean saveToDailyFile) throws Exception {
         if (!isInitialized) {
             throw new IllegalStateException("GuiDataService ist nicht initialisiert");
         }
@@ -154,8 +155,8 @@ public class GuiDataService {
                 // KOMBINIERE MIT FEAR & GREED INDEX
                 List<CurrencyPairData> combinedData = combineWithFearGreedData(freshData);
                 
-                // SPEICHERE IN ALLE SYSTEME mit automatischen Threshold-E-Mails
-                saveToAllSystems(combinedData);
+                // SPEICHERE IN SYSTEME mit automatischen Threshold-E-Mails
+                saveToAllSystems(combinedData, saveToDailyFile);
                 
                 // Aktualisiere Cache
                 updateCache(combinedData);
@@ -220,10 +221,10 @@ public class GuiDataService {
      * Lädt Daten asynchron für bessere GUI-Performance
      * WICHTIG: Speichert auch bei asynchronen Loads in alle Systeme mit Threshold-E-Mail-System
      */
-    public CompletableFuture<List<CurrencyPairData>> getCurrentDataAsync() {
+    public CompletableFuture<List<CurrencyPairData>> getCurrentDataAsync(boolean saveToDailyFile) {
         return CompletableFuture.supplyAsync(() -> {
             try {
-                return getCurrentData();
+                return getCurrentData(saveToDailyFile);
             } catch (Exception e) {
                 LOGGER.log(Level.WARNING, "Fehler beim asynchronen Laden der Daten: " + e.getMessage(), e);
                 return new ArrayList<>();
@@ -236,8 +237,8 @@ public class GuiDataService {
      * GARANTIERT Speicherung in alle Systeme mit automatischen Threshold-E-Mails
      * ERWEITERT: Kombiniert mit Fear & Greed Index
      */
-    public List<CurrencyPairData> forceDataRefresh() throws Exception {
-        LOGGER.info("Erzwinge manuelle Datenaktualisierung mit Threshold-E-Mail-System...");
+    public List<CurrencyPairData> forceDataRefresh(boolean saveToDailyFile) throws Exception {
+        LOGGER.info("Erzwinge Datenaktualisierung mit Threshold-E-Mail-System (Tägliche Datei: " + saveToDailyFile + ")...");
         
         // Invalidiere Cache
         invalidateCache();
@@ -249,8 +250,8 @@ public class GuiDataService {
             // KOMBINIERE MIT FEAR & GREED INDEX
             List<CurrencyPairData> combinedData = combineWithFearGreedData(freshData);
             
-            // GARANTIERTE Speicherung in alle Systeme mit Threshold-E-Mail-System
-            saveToAllSystems(combinedData);
+            // GARANTIERTE Speicherung in erforderliche Systeme mit Threshold-E-Mail-System
+            saveToAllSystems(combinedData, saveToDailyFile);
             
             // Aktualisiere Cache
             updateCache(combinedData);
@@ -267,8 +268,9 @@ public class GuiDataService {
      * *** KORRIGIERTE ZENTRALE METHODE: Speichert Daten in ALLE SYSTEME mit automatischen Threshold-E-Mails ***
      * Der SignalChangeHistoryManager übernimmt jetzt die komplette E-Mail-Logik mit Threshold-System
      * @param data Die zu speichernden Daten
+     * @param saveToDailyFile Ob die Daten in die tägliche Datei gespeichert werden sollen
      */
-    private void saveToAllSystems(List<CurrencyPairData> data) {
+    private void saveToAllSystems(List<CurrencyPairData> data, boolean saveToDailyFile) {
         if (data == null || data.isEmpty()) {
             LOGGER.warning("Keine Daten zum Speichern in allen Systemen mit Threshold-E-Mail-System");
             return;
@@ -283,7 +285,7 @@ public class GuiDataService {
             //    - Threshold-E-Mails senden (sendSignalChangeNotificationWithThreshold)
             //    - recordSentSignal() aufrufen
             //    - lastsend.csv aktualisieren
-            List<SignalChangeEvent> detectedChanges = signalChangeManager.processNewData(data);
+            List<SignalChangeEvent> detectedChanges = signalChangeManager.processNewData(data, saveToDailyFile);
             
             if (!detectedChanges.isEmpty()) {
                 LOGGER.info("SIGNALWECHSEL ERKANNT: " + detectedChanges.size() + " Wechsel bei diesem Refresh!");
@@ -300,8 +302,12 @@ public class GuiDataService {
             }
             
             // 2. SPEICHERE in tägliche Dateien
-            fileManager.appendDataToFile(data);
-            LOGGER.fine("✓ Daten in tägliche Datei gespeichert");
+            if (saveToDailyFile) {
+                fileManager.appendDataToFile(data);
+                LOGGER.fine("✓ Daten in tägliche Datei gespeichert");
+            } else {
+                LOGGER.fine("Kein täglicher Speichervorgang: überspringe tägliche Datei");
+            }
             
             // 3. SPEICHERE in währungspaar-spezifische Dateien
             currencyPairManager.appendDataForAllPairs(data);

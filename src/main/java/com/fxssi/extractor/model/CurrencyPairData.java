@@ -111,22 +111,6 @@ public class CurrencyPairData {
     }
     
     /**
-     * Bestimmt das Handelssignal basierend auf Buy-Percentage
-     * Buy > 60% = SELL Signal (gegen die Masse)
-     * Buy < 40% = BUY Signal (gegen die Masse)
-     * 40% <= Buy <= 60% = NEUTRAL
-     */
-    public void calculateTradingSignal() {
-        if (buyPercentage > 60.0) {
-            this.tradingSignal = TradingSignal.SELL;
-        } else if (buyPercentage < 40.0) {
-            this.tradingSignal = TradingSignal.BUY;
-        } else {
-            this.tradingSignal = TradingSignal.NEUTRAL;
-        }
-    }
-    
-    /**
      * Überprüft die Konsistenz der Daten
      * Buy% + Sell% sollte ungefähr 100% ergeben
      */

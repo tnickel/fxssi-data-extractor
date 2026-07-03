@@ -77,12 +77,9 @@ fxssi-data-extractor/
         │   └── LastSentSignalManager.java  # Anti-Spam (Threshold-Prüfung)
         ├── scheduler/
         │   └── HourlyScheduler.java        # Console-Modus: stündlicher Task
-        └── notification/
-            ├── EmailConfig.java            # SMTP-Konfiguration + Checkbox-Einstellungen
-            └── EmailService.java           # Email-Versand, Filterung, Rate-Limiting
-    └── com/fxsssi/extractor/
-        ├── storage/
-        │   └── CurrencyPairDataManager.java # Pro-Paar CSV-Dateien (Alternative)
+        ├── notification/
+        │   ├── EmailConfig.java            # SMTP-Konfiguration + Checkbox-Einstellungen
+        │   └── EmailService.java           # Email-Versand, Filterung, Rate-Limiting
         └── gui/
             ├── FXSSIGuiApplication.java    # JavaFX Application (APP_VERSION hier)
             ├── MainWindowController.java   # Hauptfenster-Logik, Tabelle, Buttons

@@ -1,4 +1,4 @@
-package com.fxsssi.extractor.gui.config;
+package com.fxssi.extractor.gui.config;
 
 
 import com.fxssi.extractor.notification.EmailConfig;
