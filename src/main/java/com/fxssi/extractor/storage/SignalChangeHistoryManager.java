@@ -284,10 +284,11 @@ public class SignalChangeHistoryManager {
      * ✅ FIXED: MetaTrader-Sync wird jetzt IMMER ausgeführt (auch ohne
      * Signalwechsel)
      * 
-     * @param newData Liste der neuen Währungsdaten
+     * @param newData                 Liste der neuen Währungsdaten
+     * @param saveLastKnownSignals    true = last_known_signals.csv schreiben (nur bei tägl. Check / manuell)
      * @return Liste der erkannten Signalwechsel
      */
-    public List<SignalChangeEvent> processNewData(List<CurrencyPairData> newData) {
+    public List<SignalChangeEvent> processNewData(List<CurrencyPairData> newData, boolean saveLastKnownSignals) {
         if (newData == null || newData.isEmpty()) {
             return new ArrayList<>();
         }
@@ -338,10 +339,13 @@ public class SignalChangeHistoryManager {
                 LOGGER.fine("Keine Signalwechsel erkannt");
             }
 
-            // ✅ FIX: IMMER speichern und synchronisieren, auch ohne Signalwechsel
-            // Dies stellt sicher dass bei jedem Refresh (auch ohne Signalwechsel)
-            // die MetaTrader-Datei aktualisiert wird
-            saveLastKnownSignals();
+            // last_known_signals.csv nur bei täglichem Check oder manuellem Refresh schreiben
+            if (saveLastKnownSignals) {
+                saveLastKnownSignals();
+                LOGGER.info("last_known_signals.csv gespeichert (täglicher Check / manueller Refresh)");
+            } else {
+                LOGGER.fine("last_known_signals.csv NICHT geschrieben (stündlicher Hintergrund-Fetch)");
+            }
 
             // Threshold-basierte E-Mail-Versendung
             if (emailNotificationsEnabled && emailService != null) {
@@ -573,8 +577,8 @@ public class SignalChangeHistoryManager {
         LOGGER.info("Fahre SignalChangeHistoryManager herunter...");
 
         try {
-            // Speichere letzte bekannte Signale (inkl. MetaTrader-Sync)
-            saveLastKnownSignals();
+            // KEIN saveLastKnownSignals() beim Herunterfahren:
+            // Die Datei wird nur beim regulären stündlichen Refresh geschrieben.
 
             // Cache leeren
             lastKnownSignals.clear();
